@@ -1,0 +1,99 @@
+# BIMOS Global Dockerfile
+# Consolidates ESMFold, Vina, and GROMACS into a single image.
+
+#################################################################
+# Stage 1: GROMACS Builder
+#################################################################
+FROM docker.io/nvidia/cuda:13.1.1-cudnn-devel-ubuntu24.04 AS gmx_builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake git wget curl libfftw3-dev mpich ca-certificates \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt
+RUN wget https://ftp.gromacs.org/gromacs/gromacs-2025.4.tar.gz && \
+    tar xfz gromacs-2025.4.tar.gz && rm gromacs-2025.4.tar.gz && \
+    cd gromacs-2025.4 && mkdir build && cd build && \
+    CC=gcc CXX=g++ cmake .. \
+      -DGMX_OPENMP=ON \
+      -DGMX_BUILD_OWN_FFTW=ON \
+      -DREGRESSIONTEST_DOWNLOAD=OFF \
+      -DGMX_GPU=CUDA \
+      -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda \
+      -DGMX_FFT_LIBRARY=fftw3 \
+      -DGMX_PYTHON_PACKAGE=OFF \
+      -DGMX_PREFER_STATIC_LIBS=ON && \
+    make -j"$(nproc)" && make install
+
+#################################################################
+# Stage 2: Final Runtime Image
+#################################################################
+FROM docker.io/nvidia/cuda:13.1.1-cudnn-runtime-ubuntu24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV GMX_MAXBACKUP=999
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip python3-dev \
+    git wget curl ca-certificates \
+    libfftw3-single3 libfftw3-double3 \
+    mpich libopenmpi-dev \
+    libxml2 \
+    g++ \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install Vina (use the pre-compiled binary from the vina-all image or fallback to conda-forge)
+RUN wget -q "https://github.com/ccsb-scripps/AutoDock-Vina/releases/download/v1.2.5/vina_1.2.5_linux_x86_64" \
+        -O /usr/local/bin/vina && \
+    chmod +x /usr/local/bin/vina || \
+    (pip3 install --no-cache-dir vina && ln -sf $(python3 -c "import vina, os; print(os.path.join(os.path.dirname(vina.__file__), 'vina'))") /usr/local/bin/vina)
+
+# Copy GROMACS from builder
+COPY --from=gmx_builder /usr/local/gromacs /usr/local/gromacs
+ENV PATH=/usr/local/gromacs/bin:$PATH
+RUN echo "source /usr/local/gromacs/bin/GMXRC" >> /etc/bash.bashrc
+
+# Install Python packages for Vina/Meeko/RDKit
+RUN pip3 install --break-system-packages --no-cache-dir \
+    rdkit \
+    numpy \
+    gemmi \
+    scipy \
+    tomli \
+    tqdm \
+    pandas \
+    requests \
+    biopython \
+    git+https://github.com/forlilab/meeko
+
+# Install PyTorch (CPU-only to avoid massive image size, can be swapped for GPU)
+RUN pip3 install --break-system-packages --no-cache-dir \
+    torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Install ESM and OpenFold dependencies
+RUN pip3 install --break-system-packages --no-cache-dir \
+    omegaconf \
+    pytorch_lightning \
+    ml_collections \
+    einops \
+    modelcif \
+    pyyaml \
+    dm-tree \
+    git+https://github.com/NVIDIA/dllogger.git
+
+# Install OpenFold and ESM (simplified)
+RUN pip3 install --break-system-packages --no-cache-dir --no-build-isolation git+https://github.com/sokrypton/openfold.git
+RUN pip3 install --break-system-packages --no-cache-dir --no-build-isolation git+https://github.com/sokrypton/esm.git
+
+# Set up directories
+RUN mkdir -p /models /workspace /data /results
+WORKDIR /workspace
+
+# Final configuration
+ENV PATH="/usr/local/bin:$PATH"
+
+CMD ["/bin/bash"]
