@@ -1,0 +1,50 @@
+# BIMOS: Biomolecular Modeling Suite - Git Ignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+.env
+*.egg-info/
+.installed.cfg
+.pytest_cache/
+
+# Build & Obfuscation (Nuitka)
+build/
+dist/
+*.build/
+*.dist/
+*.onefile-build/
+bimos-cli
+nuitka-crash-report.xml
+
+# Node.js (Frontend)
+node_modules/
+frontend/dist/
+.eslintcache
+
+# Scientific Data & Jobs
+workspace/
+.jobs/
+*.log
+*.xtc
+*.trr
+*.edr
+*.gro
+*.tpr
+*.tng
+*.cpt
+*.mdp
+*.top
+*.itp
+*.ndx
+
+# Database
+/backend/data/*.sql
+
+# OS Specific
+.DS_Store
+Thumbs.db
