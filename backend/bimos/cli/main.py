@@ -130,6 +130,55 @@ def predict(fasta_file: str, output: str, recycles: int, background: bool, gui: 
         _run()
 
 
+@cli.command("predict-boltz")
+@click.argument("fasta_file", type=click.Path(exists=True))
+@click.option("--output", "-o", default=None, help="Output directory.")
+@click.option("--models", "-n", default=5, show_default=True, help="Number of Boltz models to run.")
+@click.option("--background", "-b", is_flag=True, help="Run in background thread.")
+@click.option("--gui", "-g", is_flag=True, help="Open the GUI dashboard for monitoring.")
+def predict_boltz(fasta_file: str, output: str, models: int, background: bool, gui: bool) -> None:
+    """Predict protein structure from a FASTA file using Boltz-1."""
+    from bimos.core.boltz import predict_boltz
+
+    job = store.create(kind="predict-boltz", meta={"fasta": fasta_file}, output_dir=output or "")
+    click.echo(f"Job ID: {job.id}")
+
+    def _run() -> None:
+        store.start(job.id)
+
+        def emit(line: str) -> None:
+            store.log(job.id, line)
+            if not background and not gui:
+                click.echo(line)
+
+        try:
+            result = predict_boltz(
+                fasta_path=fasta_file,
+                output_dir=output,
+                num_models=models,
+                on_output=emit,
+            )
+            store.complete(job.id, exit_code=0)
+            if not background and not gui:
+                click.echo(f"\nStatus  : {result['status']}")
+                click.echo(f"Struct  : {result['struct_file']}")
+                click.echo(f"Confidence: {result['confidence']}")
+        except Exception as exc:
+            store.fail(job.id, str(exc))
+            click.echo(f"Error: {exc}", err=True)
+
+    if gui:
+        threading.Thread(target=_run, daemon=True).start()
+        from bimos.api.server import start_server
+        click.echo("Starting Boltz prediction and opening dashboard...")
+        start_server(desktop=True)
+    elif background:
+        click.echo("Running in background. Use 'bimos jobs' to check status.")
+        threading.Thread(target=_run, daemon=True).start()
+    else:
+        _run()
+
+
 # ── dock ──────────────────────────────────────────────────────────────────────
 
 @cli.command()
@@ -184,78 +233,37 @@ def dock(protein_pdb: str, ligands_sdf: str, output: str, background: bool, gui:
         _run()
 
 
-# ── simulate ──────────────────────────────────────────────────────────────────
+# ── workflow ──────────────────────────────────────────────────────────────────
 
 @cli.command()
-@click.argument("pdb_file", type=click.Path(exists=True))
+@click.option("--protein", "-p", "pdb_file", type=click.Path(exists=True), required=True, help="Input protein PDB file.")
+@click.option("--ligand-gro", "ligand_gro", type=click.Path(exists=True), default=None, help="Ligand .gro file (for Holo).")
+@click.option("--ligand-itp", "ligand_itp", type=click.Path(exists=True), default=None, help="Ligand .itp file (for Holo).")
 @click.option("--output", "-o", default=None, help="Output directory.")
 @click.option("--background", "-b", is_flag=True, help="Run in background thread.")
 @click.option("--gui", "-g", is_flag=True, help="Open the GUI dashboard for monitoring.")
-def simulate(pdb_file: str, output: str, background: bool, gui: bool) -> None:
+def workflow(pdb_file: str, ligand_gro: str, ligand_itp: str, output: str, background: bool, gui: bool) -> None:
     """Run a GROMACS MD simulation (Prep -> Min -> NVT -> NPT -> SDM -> Analysis)."""
     from bimos.core.workflow import run_md_simulation
 
-    job = store.create(kind="simulate", meta={"pdb": pdb_file}, output_dir=output or "")
-    click.echo(f"Job ID: {job.id}")
-
-    def _run() -> None:
-        store.start(job.id)
-
-        def emit(line: str) -> None:
-            store.log(job.id, line)
-            if not background and not gui:
-                click.echo(line)
-
-        try:
-            result = run_md_simulation(
-                pdb_path=pdb_file,
-                output_dir=output,
-                on_output=emit,
-            )
-            store.complete(job.id, exit_code=0)
-            if not background and not gui:
-                click.echo(f"\nStatus : {result['status']}")
-                click.echo(f"Results: {result['output_dir']}")
-        except Exception as exc:
-            store.fail(job.id, str(exc))
-            click.echo(f"Error: {exc}", err=True)
-
-    if gui:
-        threading.Thread(target=_run, daemon=True).start()
-        from bimos.api.server import start_server
-        click.echo("Starting simulation and opening dashboard...")
-        start_server(desktop=True)
-    elif background:
-        click.echo("Running in background. Use 'bimos jobs' to check status.")
-        threading.Thread(target=_run, daemon=True).start()
-    else:
-        _run()
-
-
-@cli.command()
-@click.argument("pdb_file", type=click.Path(exists=True))
-@click.argument("ligand_gro", type=click.Path(exists=True))
-@click.argument("ligand_itp", type=click.Path(exists=True))
-@click.option("--output", "-o", default=None, help="Output directory.")
-@click.option("--background", "-b", is_flag=True, help="Run in background thread.")
-@click.option("--gui", "-g", is_flag=True, help="Open the GUI dashboard for monitoring.")
-def simulate_holo(pdb_file: str, ligand_gro: str, ligand_itp: str, output: str, background: bool, gui: bool) -> None:
-    """Run a GROMACS MD simulation for a Protein-Ligand complex."""
-    from bimos.core.workflow import run_md_simulation
-
+    is_holo = bool(ligand_gro and ligand_itp)
+    kind = "workflow-holo" if is_holo else "workflow-apo"
+    
     job = store.create(
-        kind="simulate-holo",
-        meta={"pdb": pdb_file, "gro": ligand_gro, "itp": ligand_itp},
+        kind=kind, 
+        meta={"pdb": pdb_file, "gro": ligand_gro, "itp": ligand_itp}, 
         output_dir=output or ""
     )
     click.echo(f"Job ID: {job.id}")
 
     def _run() -> None:
         store.start(job.id)
+
         def emit(line: str) -> None:
             store.log(job.id, line)
             if not background and not gui:
                 click.echo(line)
+
         try:
             result = run_md_simulation(
                 pdb_path=pdb_file,
@@ -275,13 +283,14 @@ def simulate_holo(pdb_file: str, ligand_gro: str, ligand_itp: str, output: str, 
     if gui:
         threading.Thread(target=_run, daemon=True).start()
         from bimos.api.server import start_server
-        click.echo("Starting Holo simulation and opening dashboard...")
+        click.echo(f"Starting {'Holo' if is_holo else 'Apo'} workflow and opening dashboard...")
         start_server(desktop=True)
     elif background:
-        click.echo("Running in background.")
+        click.echo("Running in background. Use 'bimos jobs' to check status.")
         threading.Thread(target=_run, daemon=True).start()
     else:
         _run()
+
 
 
 # ── qm ────────────────────────────────────────────────────────────────────────

@@ -25,6 +25,7 @@ dependencies = [
     "pyqt6-webengine>=6.11.0",
     "qtpy>=2.4.3",
     "zstandard>=0.25.0",
+    "pyyaml>=6.0.3",
 ]
 
 [project.scripts]

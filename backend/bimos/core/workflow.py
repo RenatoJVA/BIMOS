@@ -61,7 +61,7 @@ def _detect_stage(cwd: Path, comp: str, is_holo: bool = False) -> Stage:
 
     # Simulation phases check — log name matches deffnm: {phase}-{comp}.log
     for phase in ["nvt", "npt", "sdm"]:
-        if not (cwd / f"{phase}-{comp}.gro").exists() or not _log_has(cwd, f"{phase}-{comp}.log", "Writing final coordinates."):
+        if not (cwd / f"{phase}-{comp}.gro").exists() or not _log_has(cwd, f"{phase}-{comp}.log", "Finished mdrun"):
             return Stage(phase)
 
     # Analysis check
@@ -132,13 +132,27 @@ def _patch_itp(itp_path: Path) -> None:
     itp_path.write_text("".join(patched))
 
 
-def _inject_topology(top_path: Path, lig_name: str) -> None:
-    content = top_path.read_text(errors="replace")
-    if f'#include "{lig_name}.itp"' not in content:
-        content = re.sub(r"(#include\s+\"[^\"]*forcefield\.itp\")", r"\1\n" + f'#include "{lig_name}.itp"', content, count=1)
-    if lig_name not in content.split("[ molecules ]")[-1] if "[ molecules ]" in content else True:
-        content = content.rstrip() + f"\n{lig_name:<20}1\n"
-    top_path.write_text(content)
+def _inject_topology(top_path: Path, itp_path: Path) -> str:
+    """Injects ITP include and detects the moleculetype name."""
+    # Detect name from ITP
+    itp_content = itp_path.read_text(errors="replace")
+    match = re.search(r"\[\s*moleculetype\s*\]\s*\n\s*;[^\n]*\n\s*(\S+)", itp_content, re.MULTILINE)
+    if not match:
+        # Fallback if no comment line
+        match = re.search(r"\[\s*moleculetype\s*\]\s*\n\s*(\S+)", itp_content, re.MULTILINE)
+    
+    lig_name = match.group(1) if match else "ligand"
+    
+    top_content = top_path.read_text(errors="replace")
+    inc_line = f'#include "{itp_path.name}"'
+    if inc_line not in top_content:
+        top_content = re.sub(r"(#include\s+\"[^\"]*forcefield\.itp\")", r"\1\n" + inc_line, top_content, count=1)
+    
+    if lig_name not in top_content.split("[ molecules ]")[-1] if "[ molecules ]" in top_content else True:
+        top_content = top_content.rstrip() + f"\n{lig_name:<20}1\n"
+    
+    top_path.write_text(top_content)
+    return lig_name
 
 
 def _inject_posres(top_path: Path, lig_name: str) -> None:
@@ -148,6 +162,8 @@ def _inject_posres(top_path: Path, lig_name: str) -> None:
         marker = "; Include water topology"
         content = content.replace(marker, block + marker, 1) if marker in content else content.rstrip() + "\n" + block
         top_path.write_text(content)
+
+
 
 
 def _build_complex(prot_gro: Path, lig_gro: Path, resname: str, out: Path) -> None:
@@ -162,12 +178,26 @@ def _get_box(gro: Path) -> list[str]:
     return gro.read_text().splitlines()[-1].split()[:3]
 
 
+def _clean_pdb(input_pdb: Path, output_pdb: Path) -> None:
+    """Filter PDB to remove HOH, HETATM, ANISOU, CONECT, NA, CL."""
+    exclusions = {"HOH", "HETATM", "ANISOU", "CONECT", "NA", "CL"}
+    lines = input_pdb.read_text(errors="replace").splitlines(keepends=True)
+    with open(output_pdb, "w") as f:
+        for line in lines:
+            if not any(line.startswith(ex) or f" {ex} " in line[:12] for ex in exclusions):
+                f.write(line)
+
+
 # ── GMX Invocation ────────────────────────────────────────────────────────────
 
-def _gmx_call(bin: str, args: list[str], cwd: Path, out_cb: Optional[Callable[[str], None]], stdin: str = "") -> int:
-    return container.run(command=[bin] + args, image=IMAGE, volumes={str(cwd): "/workspace"}, workdir="/workspace", on_output=out_cb, stdin_text=stdin)
+def _gmx_call(bin_name: str, args: list[str], cwd: Path, out_cb: Optional[Callable[[str], None]], stdin: str = "") -> int:
+    return container.run(command=[bin_name] + args, image=IMAGE, volumes={str(cwd): "/workspace"}, workdir="/workspace", on_output=out_cb, stdin_text=stdin)
 
 def _gmx(args: list[str], cwd: Path, cb: Optional[Callable[[str], None]] = None, stdin: str = "") -> int:
+    return _gmx_call("gmx", args, cwd, cb, stdin)
+
+def _gmx_d(args: list[str], cwd: Path, cb: Optional[Callable[[str], None]] = None, stdin: str = "") -> int:
+    # Use gmx as fallback if gmx_d is not available (common in NGC images)
     return _gmx_call("gmx", args, cwd, cb, stdin)
 
 
@@ -177,10 +207,10 @@ def _run_minimization(comp: str, cwd: Path, cb: Optional[Callable[[str], None]],
     tag = f"min-{comp}"
     prefix = "holo" if is_holo else "apo"
     idx = "index.ndx" if is_holo else None
+    traj_file = cwd / f"{tag}-traj.trr"
 
     for label, mdp_file in [("steep", f"{prefix}-min-steep.mdp"), ("cg", f"{prefix}-min-cg.mdp")]:
-        # FIX: log name matches deffnm pattern used by mdrun: min-{comp}.log
-        log_f = f"{tag}.log"
+        log_f = f"{tag}-{label}-mdrun.log"
         n, converged = 0, False
         while n < MAX_MIN_ITER and not converged:
             g_args = ["grompp", "-f", mdp_file, "-c", f"{tag}.gro", "-r", f"{tag}.gro", "-p", f"{comp}.top", "-o", f"{tag}.tpr", "-maxwarn", "3"]
@@ -188,9 +218,25 @@ def _run_minimization(comp: str, cwd: Path, cb: Optional[Callable[[str], None]],
                 g_args += ["-n", idx]
             _gmx(g_args, cwd, cb)
 
-            # FIX: use gmx (single precision) — gmx_d is not present in bimos/global image
+            # Use gmx_d (double precision) for minimization as per robust user scripts
             m_args = ["mdrun", "-deffnm", tag, "-v", "-pin", "on", "-pinoffset", "0", "-nice", "0"] + _get_parallel_args()
-            _gmx(m_args, cwd, cb)
+            _gmx_d(m_args, cwd, cb)
+
+            # Trajectory concatenation logic from user scripts
+            new_trr = cwd / f"{tag}.trr"
+            if n == 0:
+                if new_trr.exists():
+                    new_trr.rename(traj_file)
+            else:
+                if new_trr.exists() and traj_file.exists():
+                    temp_traj = cwd / "temp_traj.trr"
+                    _gmx(["trjcat", "-f", str(traj_file), str(new_trr), "-o", str(temp_traj), "-cat"], cwd, cb)
+                    temp_traj.rename(traj_file)
+                    new_trr.unlink(missing_ok=True)
+
+            # Cleanup backups
+            for bak in cwd.glob(f"*#*{tag}*"):
+                bak.unlink(missing_ok=True)
 
             converged = not _log_has(cwd, log_f, "did not converge to Fmax")
             n += 1
@@ -212,25 +258,37 @@ def _run_sim_phase(phase: str, prev: str, comp: str, cwd: Path, cb: Optional[Cal
         j += 1
 
     finished = False
+    consecutive_fails = 0
     while not finished:
         cpt = f"{tag}_{j}.cpt"
         m_args = ["mdrun", "-deffnm", tag, "-cpo", cpt, "-nice", "0", "-v", "-maxh", "6", "-cpt", "1", "-pin", "on", "-pinoffset", "0"] + _get_parallel_args()
+        
         if settings.use_gpu:
-            # FIX: -update gpu removed — crashes at step 0 with CUDA error #700/#717 on
-            # GROMACS 2025 when position restraints are active (NVT/NPT). -nb/-pme/-bonded
-            # gpu offloading remain enabled and cover the vast majority of GPU acceleration.
             m_args += ["-nb", "gpu", "-pme", "gpu", "-bonded", "gpu"]
+        
         if j > 1:
             m_args += ["-cpi", f"{tag}_{j-1}.cpt"]
 
-        _gmx(m_args, cwd, cb)
-        # FIX: log filename matches deffnm — {tag}.log, not {phase}mdrun.log
-        if (cwd / f"{tag}.gro").exists() and _log_has(cwd, f"{tag}.log", "Writing final coordinates."):
+        rc = _gmx(m_args, cwd, cb)
+        
+        if rc != 0 and not (cwd / cpt).exists():
+            consecutive_fails += 1
+            if consecutive_fails >= 3:
+                raise RuntimeError(f"mdrun for {phase} failed 3 times without progress.")
+            continue
+        else:
+            consecutive_fails = 0
+
+        if (cwd / f"{tag}.gro").exists() and _log_has(cwd, f"{tag}.log", "Finished mdrun"):
             finished = True
         else:
             j += 1
             if j > 50:
                 break
+
+    # Cleanup backups
+    for bak in cwd.glob("#*#"):
+        bak.unlink(missing_ok=True)
 
 
 # ── Unified Pipeline ──────────────────────────────────────────────────────────
@@ -264,37 +322,42 @@ def run_md_simulation(
     from bimos.core.workflow import _default_mdps
     mdps = _default_mdps(is_holo)
     for name, content in mdps.items():
-        (cwd / name).write_text(content)
+        mdp_path = cwd / name
+        if not mdp_path.exists():
+            mdp_path.write_text(content)
 
     stage = _detect_stage(cwd, comp, is_holo)
     log(f"Starting {prefix} pipeline at stage: {stage}")
 
     if stage == Stage.PREP:
         log("Phase: PREP")
+        _clean_pdb(cwd / f"{pdb.stem}.pdb", cwd / f"{pdb.stem}-clean.pdb")
+        
         if is_holo:
             resname = _detect_resname_from_gro(cwd / "ligand.gro")
             _patch_itp(cwd / "ligand.itp")
-            _gmx(["editconf", "-f", f"{pdb.stem}.pdb", "-o", "prot-box.pdb", "-d", "1.0", "-bt", "cubic", "-noc"], cwd, on_output)
-            _gmx(["editconf", "-f", f"{pdb.stem}.pdb", "-o", "prot-box.gro", "-d", "1.0", "-bt", "cubic", "-noc"], cwd, on_output)
+            # Correct sequence for Holo from user script
+            _gmx(["editconf", "-f", f"{pdb.stem}-clean.pdb", "-o", "prot-box.pdb", "-d", "1.0", "-bt", "cubic", "-noc"], cwd, on_output)
+            _gmx(["editconf", "-f", f"{pdb.stem}-clean.pdb", "-o", "prot-box.gro", "-d", "1.0", "-bt", "cubic", "-noc"], cwd, on_output)
             box = _get_box(cwd / "prot-box.gro")
             _fix_histidines(cwd / "prot-box.pdb", cwd / "prot-his.pdb", log)
             _gmx(["pdb2gmx", "-f", "prot-his.pdb", "-o", "prot-pdb2gmx.gro", "-p", f"{comp}.top", "-ff", "oplsaa", "-water", "tip3p", "-ignh", "-merge", "all"], cwd, on_output)
-            _inject_topology(cwd / f"{comp}.top", "ligand")
+            mol_name = _inject_topology(cwd / f"{comp}.top", cwd / "ligand.itp")
             _build_complex(cwd / "prot-pdb2gmx.gro", cwd / "ligand.gro", resname, cwd / f"{comp}-raw.gro")
             _gmx(["genrestr", "-f", "ligand.gro", "-o", "ligand-posre.itp", "-fc", "1000", "1000", "1000"], cwd, on_output, f"{resname}\n")
             _inject_posres(cwd / f"{comp}.top", "ligand")
             _gmx(["editconf", "-f", f"{comp}-raw.gro", "-o", f"pre-{comp}-solv.gro", "-bt", "cubic", "-box"] + box, cwd, on_output)
             _gmx(["solvate", "-cp", f"pre-{comp}-solv.gro", "-cs", "spc216.gro", "-o", f"min-{comp}-solv.gro", "-p", f"{comp}.top"], cwd, on_output)
             _gmx(["grompp", "-f", "holo-ions.mdp", "-c", f"min-{comp}-solv.gro", "-p", f"{comp}.top", "-o", f"min-{comp}.tpr", "-maxwarn", "3"], cwd, on_output)
-            _gmx(["genion", "-s", f"min-{comp}.tpr", "-o", f"min-{comp}.gro", "-p", f"{comp}.top", "-neutral", "-conc", "0.154"], cwd, on_output, "SOL\n")
+            _gmx(["genion", "-s", f"min-{comp}.tpr", "-o", f"min-{comp}.gro", "-p", f"{comp}.top", "-neutral", "-conc", "0.154004106"], cwd, on_output, "SOL\n")
             _gmx(["make_ndx", "-f", f"min-{comp}.gro", "-o", "index.ndx"], cwd, on_output, f"1 | r {resname}\nq\n")
         else:
-            _gmx(["editconf", "-f", f"{pdb.stem}.pdb", "-o", "pre-box.pdb", "-c", "-d", "1.0", "-bt", "cubic"], cwd, on_output)
+            _gmx(["editconf", "-f", f"{pdb.stem}-clean.pdb", "-o", "pre-box.pdb", "-c", "-d", "1.0", "-bt", "cubic"], cwd, on_output)
             _fix_histidines(cwd / "pre-box.pdb", cwd / "pre-his.pdb", log)
             _gmx(["pdb2gmx", "-f", "pre-his.pdb", "-o", f"min-{comp}.gro", "-p", f"{comp}.top", "-ff", "oplsaa", "-water", "tip3p", "-ignh", "-merge", "all"], cwd, on_output)
             _gmx(["solvate", "-cp", f"min-{comp}.gro", "-cs", "spc216.gro", "-o", f"min-{comp}-solv.gro", "-p", f"{comp}.top"], cwd, on_output)
             _gmx(["grompp", "-f", "apo-ions.mdp", "-c", f"min-{comp}-solv.gro", "-p", f"{comp}.top", "-o", f"min-{comp}.tpr", "-maxwarn", "3"], cwd, on_output)
-            _gmx(["genion", "-s", f"min-{comp}.tpr", "-o", f"min-{comp}.gro", "-p", f"{comp}.top", "-neutral", "-conc", "0.154"], cwd, on_output, "SOL\n")
+            _gmx(["genion", "-s", f"min-{comp}.tpr", "-o", f"min-{comp}.gro", "-p", f"{comp}.top", "-neutral", "-conc", "0.154004106"], cwd, on_output, "SOL\n")
         stage = Stage.MINIMIZATION
 
     if stage == Stage.MINIMIZATION:
@@ -316,10 +379,15 @@ def run_md_simulation(
             conv += ["-n", ndx]
         _gmx(conv, cwd, on_output, "1 0\n")
 
-        for tool, out, inp in [("rms", f"{prefix}-{comp}-rmsd.xvg", "4 4\n"), ("rmsf", f"{prefix}-{comp}-rmsf.xvg", "1\n"), ("gyrate", f"{prefix}-{comp}-gyrate.xvg", "1\n")]:
+        # Extended analysis from user scripts
+        for tool, out, inp in [("rms", f"{prefix}-{comp}-rmsd.xvg", "4 4\n"), ("rmsf", f"{prefix}-{comp}-rmsf.xvg", "1\n"), ("gyrate", f"{prefix}-{comp}-gyrate.xvg", "1\n"), ("hbond", f"{prefix}-{comp}-hbnum.xvg", "1\n1\n"), ("sasa", f"{prefix}-{comp}-sasa.xvg", "1\n")]:
             args = [tool, "-f", f"{tag}-noPBC.xtc", "-s", f"{tag}.tpr", "-o", out]
             if tool == "rmsf":
                 args += ["-res", "yes", "-fit", "yes"]
+            if tool == "hbond":
+                args += ["-num", out] # tool specific flag
+            if tool == "sasa":
+                args += ["-or", f"{comp}-sasa-res.xvg", "-tv", f"{comp}-sasa-vol.xvg"]
             if ndx:
                 args += ["-n", ndx]
             _gmx(args, cwd, on_output, inp)
@@ -328,16 +396,43 @@ def run_md_simulation(
 
 
 def _default_mdps(is_holo: bool = False) -> dict[str, str]:
-    p = "holo" if is_holo else "apo"
-    common = "cutoff-scheme = Verlet\nconstraints = h-bonds\n"
-    return {
-        f"{p}-ions.mdp": f"integrator = steep\nnsteps = 0\ncoulombtype = PME\nrcoulomb = 1.0\nrvdw = 1.0\n{common}",
-        f"{p}-min-steep.mdp": f"integrator = steep\nnsteps = 5000\nemtol = 100.0\ncoulombtype = PME\nrcoulomb = 1.0\nrvdw = 1.0\n{common}",
-        f"{p}-min-cg.mdp": f"integrator = cg\nnsteps = 5000\nemtol = 10.0\ncoulombtype = PME\nrcoulomb = 1.0\nrvdw = 1.0\n{common}",
-        f"{p}-nvt.mdp": f"integrator = md\nnsteps = 50000\ndt = 0.002\ntcoupl = V-rescale\ntc-grps = {'System' if not is_holo else 'Protein_LIG Water_and_ions'}\ntau_t = 0.1\nref_t = 300\ncoulombtype = PME\ngen_vel = yes\n{common}",
-        f"{p}-npt.mdp": f"integrator = md\nnsteps = 50000\ndt = 0.002\ntcoupl = V-rescale\ntc-grps = {'System' if not is_holo else 'Protein_LIG Water_and_ions'}\ntau_t = 0.1\nref_t = 300\npcoupl = Parrinello-Rahman\ntau_p = 2.0\nref_p = 1.0\ncoulombtype = PME\ncontinuation = yes\n{common}",
-        f"{p}-sdm.mdp": f"integrator = md\nnsteps = 500000\ndt = 0.002\ntcoupl = V-rescale\ntc-grps = {'System' if not is_holo else 'Protein_LIG Water_and_ions'}\ntau_t = 0.1\nref_t = 300\npcoupl = Parrinello-Rahman\ntau_p = 2.0\nref_p = 1.0\ncoulombtype = PME\ncontinuation = yes\nnstxout-compressed = 5000\n{common}",
-    }
+    import yaml
+    config_path = Path(__file__).parent.parent / "infrastructure" / "config" / "defaults.yaml"
+    
+    try:
+        with open(config_path, "r") as f:
+            templates = yaml.safe_load(f)
+    except Exception as e:
+        logger.error(f"Failed to load defaults.yaml: {e}")
+        templates = {}
+
+    prefix = "holo" if is_holo else "apo"
+    # User requirement for test: 1ns (500,000 steps)
+    prod_steps = 500_000
+    
+    result = {}
+    for stage_name in ["ions", "min-steep", "min-cg", "nvt", "npt", "sdm"]:
+        key = f"{prefix}-{stage_name}.mdp"
+        # Fallback to apo if holo section missing
+        data = templates.get(key) or templates.get(f"apo-{stage_name}.mdp")
+        
+        if not data:
+            logger.warning(f"No template found for {key}")
+            continue
+            
+        # Convert dict to GROMACS MDP format
+        lines = []
+        for k, v in data.items():
+            # Override nsteps for the production phase (sdm) or equilibration
+            if stage_name == "sdm" and k == "nsteps":
+                v = str(prod_steps)
+            elif stage_name in ["nvt", "npt"] and k == "nsteps":
+                v = "5000" # 10ps for fast test
+            lines.append(f"{k:<25} = {v}")
+        
+        result[key] = "\n".join(lines) + "\n"
+        
+    return result
 
 
 def run_qm_calculation(input_file: str, output_dir: Optional[str] = None, on_output: Optional[Callable[[str], None]] = None) -> dict:

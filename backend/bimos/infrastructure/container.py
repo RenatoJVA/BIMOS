@@ -62,7 +62,8 @@ def run(
             elif runtime == "podman":
                 full_cmd += ["--device", "nvidia.com/gpu=all"]
 
-        # Rootless Podman compat
+        # Rootless Podman and performance flags
+        full_cmd += ["--shm-size=10g"]
         if runtime == "podman":
             full_cmd += ["--userns=keep-id"]
 

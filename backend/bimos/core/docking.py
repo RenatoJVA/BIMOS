@@ -21,13 +21,13 @@ from bimos.infrastructure import container
 
 logger = logging.getLogger("bimos.docking")
 
-# Default Vina parameters
+# Default Vina parameters — robust defaults matching user scripts
 DEFAULTS = {
-    "times": 1,
+    "times": 10,
     "margin": 1.0,
-    "num_modes": 9,
-    "exhaustiveness": 8,
-    "energy_range": 3,
+    "num_modes": 20,
+    "exhaustiveness": 12,
+    "energy_range": 3.0,
     "cpu_per_job": settings.get_threads(),
 }
 
@@ -328,9 +328,9 @@ def run_docking_pipeline(
         shutil.copy2(lig_pdbqt, complex_dir / lig_pdbqt.name)
         shutil.copy2(conf_path, complex_dir / conf_path.name)
 
-        scored: list[tuple[Path, float]] = []
+        from concurrent.futures import ThreadPoolExecutor
 
-        for i in range(1, times + 1):
+        def _run_single_vina(i: int):
             out_name = f"{complex_name}-{i}.pdbqt"
             rc = _container_run(
                 [
@@ -345,14 +345,21 @@ def run_docking_pipeline(
                 work_dir=complex_dir,
                 on_output=on_output,
             )
-            if rc != 0:
-                logger.warning("[%s] Vina run %d failed", complex_name, i)
-                continue
-
             out_path = complex_dir / out_name
-            score = _extract_best_score(out_path)
-            if score is not None:
+            score = _extract_best_score(out_path) if rc == 0 else None
+            return rc, out_path, score
+
+        # Parallelize runs for this complex
+        max_workers = max(1, settings.get_threads() // max(1, cpu_per_job))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            job_results = list(executor.map(_run_single_vina, range(1, times + 1)))
+
+        scored: list[tuple[Path, float]] = []
+        for rc, out_path, score in job_results:
+            if rc == 0 and score is not None:
                 scored.append((out_path, score))
+            elif rc != 0:
+                logger.warning("[%s] A Vina run failed", complex_name)
 
         if not scored:
             logger.warning("[%s] No successful docking results.", complex_name)

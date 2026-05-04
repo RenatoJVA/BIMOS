@@ -29,7 +29,7 @@ class Settings:
     esm_model_url: str = "https://colabfold.steineggerlab.workers.dev/esm/esmfold.model"
 
     # Container image
-    bimos_image: str = os.getenv("BIMOS_IMAGE", "bimos/global:latest")
+    bimos_image: str = os.getenv("BIMOS_IMAGE", "localhost/bimos/global:latest")
     use_gpu: bool = os.getenv("BIMOS_USE_GPU", "true").lower() == "true"
     max_threads: bool = False
 

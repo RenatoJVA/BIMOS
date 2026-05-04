@@ -25,6 +25,16 @@ RUN wget https://ftp.gromacs.org/gromacs/gromacs-2025.4.tar.gz && \
       -DGMX_FFT_LIBRARY=fftw3 \
       -DGMX_PYTHON_PACKAGE=OFF \
       -DGMX_PREFER_STATIC_LIBS=ON && \
+    make -j"$(nproc)" && make install && \
+    cd ../ && rm -rf build && mkdir build && cd build && \
+    CC=gcc CXX=g++ cmake .. \
+      -DGMX_OPENMP=ON \
+      -DGMX_BUILD_OWN_FFTW=ON \
+      -DREGRESSIONTEST_DOWNLOAD=OFF \
+      -DGMX_FFT_LIBRARY=fftw3 \
+      -DGMX_PYTHON_PACKAGE=OFF \
+      -DGMX_PREFER_STATIC_LIBS=ON \
+      -DGMX_DOUBLE=on && \
     make -j"$(nproc)" && make install
 
 #################################################################

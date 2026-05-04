@@ -24,6 +24,8 @@ def main():
         "--onefile",
         # Embed the React static files
         "--include-data-dir=bimos/ui=bimos/ui",
+        "--include-data-dir=bimos/scripts=bimos/scripts",
+        "--include-data-dir=bimos/infrastructure/config=bimos/infrastructure/config",
         # Ensure packages are traced
         "--include-package=bimos",
         "--include-package=qtpy",
