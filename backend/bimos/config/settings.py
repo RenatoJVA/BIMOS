@@ -57,8 +57,19 @@ class Settings:
     )
 
     # ORCA and Gaussian: defined by host binary path (not containerized)
-    orca_path: str = os.getenv("ORCA_PATH", "")
-    gaussian_path: str = os.getenv("GAUSSIAN_PATH", "")
+    @property
+    def orca_path(self) -> str:
+        path = os.getenv("ORCA_PATH", "")
+        if not path:
+            return ""
+        return os.path.expandvars(os.path.expanduser(path))
+
+    @property
+    def gaussian_path(self) -> str:
+        path = os.getenv("GAUSSIAN_PATH", "")
+        if not path:
+            return ""
+        return os.path.expandvars(os.path.expanduser(path))
 
     def ensure_dirs(self) -> None:
         """Create all required directories on first run."""
