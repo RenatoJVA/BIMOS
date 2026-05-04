@@ -63,7 +63,12 @@ def start_server(host: str = "127.0.0.1", port: int = 8000, desktop: bool = True
     # Create native desktop window via pywebview
     import webview
     
-    # Force Qt renderer to avoid GTK errors and ensure stability
+    # Environment variables to fix common rendering issues on Linux
+    os.environ["QTWEBENGINE_DISABLE_GBM"] = "1"
+    os.environ["QT_XCB_GL_INTEGRATION"] = "none"
+    # Disable GPU to fully avoid GBM/Vulkan fallback warnings if drivers are problematic
+    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu --disable-software-rasterizer --num-raster-threads=4"
+    
     url = f"http://{host}:{port}/"
     
     webview.create_window(

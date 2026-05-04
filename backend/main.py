@@ -12,8 +12,10 @@ from bimos.cli.main import cli
 
 
 def main() -> None:
-    # Special keyword to directly launch GUI mode
-    if len(sys.argv) == 2 and sys.argv[1] == "BIMOS_GUI":
+    # Special keyword or no arguments to directly launch GUI mode
+    if len(sys.argv) == 1:
+        sys.argv = [sys.argv[0], "gui"]
+    elif len(sys.argv) == 2 and sys.argv[1] == "BIMOS_GUI":
         sys.argv = [sys.argv[0], "gui"]
 
     cli()
