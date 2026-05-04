@@ -59,6 +59,17 @@ Run a full MD pipeline (Prep -> Min -> NVT -> NPT -> Production):
 bimos-cli simulate protein.pdb
 ```
 
+### Quantum Mechanics (QM)
+Run automated Hirshfeld charge pipelines using ORCA or Gaussian:
+```bash
+# Full ORCA pipeline for a directory of .gro files
+bimos-cli qm-orca /path/to/directory --jobs 2 --charge 0
+
+# Full Gaussian pipeline for a directory of .gro files
+bimos-cli qm-g16 /path/to/directory --jobs 2 --charge 1
+```
+*Note: These pipelines automatically update your .itp files with the calculated Hirshfeld charges.*
+
 ---
 
 ## 3. The Dashboard (GUI)
@@ -80,8 +91,10 @@ bimos-cli dock protein.pdb ligands.sdf --gui
 
 BIMOS uses a `.env` file or environment variables for configuration.
 - `WORKSPACE_PATH`: Where results are stored (Default: `~/bimos_workspace`)
-- `ORCA_PATH`: Path to the ORCA binary (required for QM calculations).
-- `DOCKER_IMAGE`: The container image used for simulations.
+- `ORCA_PATH`: Full path to ORCA binary (supports `$HOME`).
+- `GAUSSIAN_PATH`: Full path to Gaussian binary (g16/g09).
+- `BIMOS_IMAGE`: The container image used for simulations.
+- `BIMOS_USE_GPU`: Set to `true` to enable GPU offloading for MD and folding.
 
 ---
 
