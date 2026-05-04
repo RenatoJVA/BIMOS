@@ -39,11 +39,11 @@ export function Terminal({ jobId, onClose, apiBase }: TerminalProps) {
       <div className="terminal-window glass-card" onClick={(e) => e.stopPropagation()}>
         <div className="terminal-header">
           <div className="terminal-controls">
-            <span className="control close" onClick={onClose}></span>
-            <span className="control minimize"></span>
-            <span className="control maximize"></span>
+            <span className="control" onClick={onClose}>[CLOSE]</span>
+            <span className="control">[MINIMIZE]</span>
+            <span className="control">[MAXIMIZE]</span>
           </div>
-          <div className="terminal-title">BIMOS Console — Job {jobId.substring(0, 8)}</div>
+          <div className="terminal-title">BIMOS CORE // CONSOLE // ID_{jobId.substring(0, 8).toUpperCase()}</div>
         </div>
         <div className="terminal-body">
           {loading && logs.length === 0 ? (

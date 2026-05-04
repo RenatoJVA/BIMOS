@@ -89,29 +89,34 @@ function App() {
                 className="glass-card job-item"
                 onClick={() => setSelectedJobId(job.id)}
               >
-                <div className="job-info">
-                  <div className="job-kind">{job.kind}</div>
-                  <div className="job-meta">{formatMeta(job.meta)}</div>
-                  {job.output_dir && (
-                    <div className="job-meta" style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
-                      out: {job.output_dir}
-                    </div>
-                  )}
-                  {job.error && (
-                    <div className="job-meta" style={{ color: 'var(--danger)' }}>
-                      err: {job.error}
-                    </div>
-                  )}
-                </div>
-                
-                <div style={{ textAlign: 'right' }}>
+                <div className="job-header">
+                  <div className="job-info">
+                    <div className="job-id">ID_{job.id.substring(0, 8).toUpperCase()}</div>
+                    <div className="job-kind">{job.kind.replace('-', ' ')}</div>
+                  </div>
                   <span className={`status-badge status-${job.status}`}>
                     {job.status}
                   </span>
-                  <div className="job-id" style={{ marginTop: '0.75rem' }}>
-                    ID: {job.id.substring(0, 8)}
-                  </div>
                 </div>
+
+                <div className="job-meta">
+                  {formatMeta(job.meta)}
+                </div>
+
+                {(job.output_dir || job.error) && (
+                  <div className="job-meta" style={{ 
+                    borderTop: '1px solid var(--border)', 
+                    paddingTop: '0.5rem',
+                    fontSize: '0.75rem',
+                    opacity: 0.8
+                  }}>
+                    {job.error ? (
+                      <span style={{ color: 'var(--danger)' }}>ERROR: {job.error}</span>
+                    ) : (
+                      <span>OUTPUT: {job.output_dir}</span>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
