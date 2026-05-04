@@ -13,6 +13,8 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query
 from pydantic import BaseModel
 
 from bimos.infrastructure.job_store import store, JobRecord
+import psutil
+import subprocess
 
 router = APIRouter(prefix="/api/v1")
 
@@ -100,6 +102,37 @@ def _dispatch(fn, job_id: str, **kwargs) -> None:
 @router.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@router.get("/system/stats")
+async def system_stats():
+    """Get CPU, Memory and GPU statistics."""
+    stats = {
+        "cpu": psutil.cpu_percent(interval=None),
+        "memory": psutil.virtual_memory().percent,
+        "gpu": None
+    }
+    
+    # Try to get GPU stats via nvidia-smi
+    try:
+        # Get GPU utilization and memory usage
+        res = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total", "--format=csv,noheader,nounits"],
+            encoding="utf-8"
+        )
+        if res:
+            parts = res.strip().split("\n")[0].split(",")
+            stats["gpu"] = {
+                "utilization": float(parts[0]),
+                "memory_used": float(parts[1]),
+                "memory_total": float(parts[2]),
+                "memory_percent": (float(parts[1]) / float(parts[2])) * 100
+            }
+    except Exception:
+        # GPU not available or nvidia-smi failed
+        pass
+        
+    return stats
 
 
 # ── Prediction ────────────────────────────────────────────────────────────────
@@ -281,6 +314,35 @@ async def run_qm(req: QMRequest):
 
     from bimos.core.workflow import run_qm_calculation
     _dispatch(run_qm_calculation, job.id, input_file=str(inp_path), output_dir=str(job_dir))
+
+    return _job_to_response(store.get(job.id))
+
+
+@router.post("/qm-orca-files", response_model=JobResponse, status_code=202)
+async def qm_orca_files(
+    gro: UploadFile = File(...),
+    itp: UploadFile = File(...),
+    charge: int = Form(0),
+):
+    """Submit an ORCA QM calculation job using GRO and ITP files."""
+    from bimos.config.settings import settings
+    job_dir = settings.workspace_path / "qm" / gro.filename.replace(".gro", "")
+    job_dir.mkdir(parents=True, exist_ok=True)
+    
+    gro_path = job_dir / gro.filename
+    itp_path = job_dir / itp.filename
+    gro_path.write_bytes(await gro.read())
+    itp_path.write_bytes(await itp.read())
+
+    job = store.create(
+        kind="qm-orca",
+        meta={"gro": str(gro_path), "itp": str(itp_path), "charge": charge},
+        output_dir=str(job_dir),
+    )
+
+    from bimos.core.qm import run_orca_pipeline
+    # run_orca_pipeline normally takes a directory; we can point it to this job_dir
+    _dispatch(run_orca_pipeline, job.id, directory=str(job_dir), charge=charge)
 
     return _job_to_response(store.get(job.id))
 

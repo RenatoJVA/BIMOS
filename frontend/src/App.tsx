@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Terminal } from './Terminal';
+import { SystemMonitor } from './SystemMonitor';
+import { FlowLauncher } from './FlowLauncher';
 
 const API_BASE = 'http://localhost:8000/api/v1';
 
@@ -60,11 +62,15 @@ function App() {
   return (
     <div className="app-container">
       <header className="header">
-        <h1 className="title">BIMOS Dashboard</h1>
-        <p className="subtitle">Biomolecular Modeling Suite • Live Job Monitor</p>
+        <div className="header-left">
+          <h1 className="title">BIMOS Dashboard</h1>
+          <p className="subtitle">Biomolecular Modeling Suite • Live Job Monitor</p>
+        </div>
+        <SystemMonitor apiBase={API_BASE} />
       </header>
 
       <main>
+        <FlowLauncher apiBase={API_BASE} onJobStarted={fetchJobs} />
         {loading ? (
           <div className="empty-state">
             <div className="spinner"></div>
