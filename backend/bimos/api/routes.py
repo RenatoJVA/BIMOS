@@ -37,6 +37,12 @@ class PredictRequest(BaseModel):
     num_recycles: int = 3
 
 
+class PredictBoltzRequest(BaseModel):
+    fasta_content: str
+    name: str = "protein"
+    num_models: int = 5
+
+
 class DockRequest(BaseModel):
     times: int = 1
     exhaustiveness: int = 8
@@ -122,6 +128,35 @@ async def predict_structure(req: PredictRequest):
         fasta_path=str(fasta_path),
         output_dir=str(job_dir),
         num_recycles=req.num_recycles,
+    )
+
+    return _job_to_response(store.get(job.id))
+
+
+@router.post("/predict-boltz", response_model=JobResponse, status_code=202)
+async def predict_boltz(req: PredictBoltzRequest):
+    """Submit a protein structure prediction job (Boltz-1)."""
+    from bimos.config.settings import settings
+
+    job_dir = settings.workspace_path / "boltz" / req.name
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    fasta_path = job_dir / f"{req.name}.fasta"
+    fasta_path.write_text(req.fasta_content)
+
+    job = store.create(
+        kind="predict-boltz",
+        meta={"name": req.name, "fasta": str(fasta_path)},
+        output_dir=str(job_dir),
+    )
+
+    from bimos.core.boltz import predict_boltz as _boltz
+    _dispatch(
+        _boltz,
+        job.id,
+        fasta_path=str(fasta_path),
+        output_dir=str(job_dir),
+        num_models=req.num_models,
     )
 
     return _job_to_response(store.get(job.id))

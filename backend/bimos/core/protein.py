@@ -166,7 +166,7 @@ def predict_structure(
     }
 
     cmd = [
-        "python", "/app/predict_esm.py",
+        "python3", "/app/predict_esm.py",
         f"{container_workspace}/{yaml_path.name}",
         "--out_dir", f"{container_workspace}/predictions",
         "--num_recycles", str(num_recycles),
