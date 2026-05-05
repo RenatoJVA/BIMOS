@@ -526,9 +526,32 @@ def db(init: bool, seed: bool, query: str) -> None:
 @click.option("--port", default=8000, show_default=True, help="API server port.")
 @click.option("--host", default="127.0.0.1", show_default=True, help="API server host.")
 @click.option("--no-desktop", is_flag=True, help="Do not open the desktop window (run headless server only).")
-def gui(port: int, host: str, no_desktop: bool) -> None:
+@click.option("--foreground", is_flag=True, help="Run in foreground (blocks terminal).")
+def gui(port: int, host: str, no_desktop: bool, foreground: bool) -> None:
     """Start the BIMOS API server and open the native desktop UI."""
     from bimos.api.server import start_server
+    import subprocess
+    import os
+    import sys
+
+    # If running desktop mode, default to backgrounding to keep terminal free
+    if not no_desktop and not foreground:
+        # Reconstruct the command line with --foreground flag
+        cmd = [sys.executable] if not getattr(sys, 'frozen', False) and 'nuitka' not in sys.modules else []
+        cmd += sys.argv
+        if "gui" not in cmd:
+            cmd.append("gui")
+        cmd.append("--foreground")
+
+        click.echo("Starting BIMOS Desktop UI in background...")
+        # Start completely detached
+        subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True
+        )
+        return
 
     if not no_desktop:
         click.echo(f"Starting BIMOS Desktop UI connected to {host}:{port} ...")
