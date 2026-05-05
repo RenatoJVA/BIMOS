@@ -5,7 +5,6 @@ import { FlowLauncher } from './FlowLauncher';
 
 const API_BASE = 'http://localhost:8000/api/v1';
 
-// Same structure as JobResponse in backend
 interface Job {
   id: string;
   kind: string;
@@ -23,13 +22,59 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [systemTheme, setSystemTheme] = useState<'light' | 'dark' | null>(null);
+
+  // Initial theme detection from URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get('systemTheme') as 'light' | 'dark' | null;
+    if (fromUrl) setSystemTheme(fromUrl);
+  }, []);
+
+  // Poll backend for system theme changes (for live updates in Qt)
+  useEffect(() => {
+    const pollTheme = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/system/theme`);
+        if (res.ok) {
+          const data = await res.json();
+          setSystemTheme(data.theme);
+        }
+      } catch (e) {
+        // Fallback to matchMedia if API is down
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        setSystemTheme(prefersDark ? 'dark' : 'light');
+      }
+    };
+
+    pollTheme();
+    const interval = setInterval(pollTheme, 1000); // Check every 1 second
+    return () => clearInterval(interval);
+  }, []);
+
+  // Apply the effective theme to the <html> element
+  useEffect(() => {
+    const root = document.documentElement;
+    const effective = systemTheme || 'light';
+    root.setAttribute('data-theme', effective);
+  }, [systemTheme]);
+
+  // Browser-native fallback listener (for real browsers)
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => {
+      setSystemTheme(e.matches ? 'dark' : 'light');
+    };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
 
   const fetchJobs = async () => {
     try {
       const res = await fetch(`${API_BASE}/jobs`);
       if (!res.ok) throw new Error('Failed to fetch jobs');
       const data = await res.json();
-      // Sort newest first
       setJobs(data.sort((a: Job, b: Job) => 
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       ));
@@ -43,7 +88,6 @@ function App() {
 
   useEffect(() => {
     fetchJobs();
-    // Poll every 3 seconds for live updates
     const interval = setInterval(fetchJobs, 3000);
     return () => clearInterval(interval);
   }, []);
@@ -51,7 +95,6 @@ function App() {
   const formatMeta = (meta: Record<string, any>) => {
     return Object.entries(meta)
       .map(([k, v]) => {
-        // Only show base filename instead of full path for cleaner UI
         const valStr = String(v);
         const displayVal = valStr.includes('/') ? valStr.split('/').pop() : valStr;
         return `${k}: ${displayVal}`;
@@ -60,82 +103,87 @@ function App() {
   };
 
   return (
-    <div className="app-container">
-      <header className="header">
-        <div className="header-left">
-          <h1 className="title">BIMOS Dashboard</h1>
-          <p className="subtitle">Biomolecular Modeling Suite • Live Job Monitor</p>
-        </div>
-        <SystemMonitor apiBase={API_BASE} />
-      </header>
-
-      <main>
-        <FlowLauncher apiBase={API_BASE} onJobStarted={fetchJobs} />
-        {loading ? (
-          <div className="empty-state">
-            <div className="spinner"></div>
-            <p>Connecting to backend engine...</p>
-          </div>
-        ) : error ? (
-          <div className="glass-card" style={{ borderColor: 'var(--danger)' }}>
-            <p style={{ color: 'var(--danger)' }}>{error}</p>
-          </div>
-        ) : jobs.length === 0 ? (
-          <div className="glass-card empty-state">
-            <p>No active jobs.</p>
-            <p style={{ fontSize: '0.9rem', marginTop: '0.5rem' }}>
-              Run jobs via CLI: <code>bimos predict --background</code>
+    <div className="min-h-screen bg-bg-page text-text-primary transition-colors duration-200">
+      <div className="max-w-[1200px] mx-auto p-8 w-full animate-fadeIn">
+        <header className="mb-12 flex justify-between items-center border-b border-border pb-6">
+          <div className="flex flex-col gap-2">
+            <h1 className="text-4xl font-bold tracking-tight text-text-primary">BIMOS Dashboard</h1>
+            <p className="text-text-secondary text-base font-mono tracking-widest uppercase opacity-80">
+              Biomolecular Modeling Suite • Live Job Monitor
             </p>
           </div>
-        ) : (
-          <div className="dashboard-grid">
-            {jobs.map((job) => (
-              <div 
-                key={job.id} 
-                className="glass-card job-item"
-                onClick={() => setSelectedJobId(job.id)}
-              >
-                <div className="job-header">
-                  <div className="job-info">
-                    <div className="job-id">ID_{job.id.substring(0, 8).toUpperCase()}</div>
-                    <div className="job-kind">{job.kind.replace('-', ' ')}</div>
-                  </div>
-                  <span className={`status-badge status-${job.status}`}>
-                    {job.status}
-                  </span>
-                </div>
+          <SystemMonitor apiBase={API_BASE} />
+        </header>
 
-                <div className="job-meta">
-                  {formatMeta(job.meta)}
-                </div>
 
-                {(job.output_dir || job.error) && (
-                  <div className="job-meta" style={{ 
-                    borderTop: '1px solid var(--border)', 
-                    paddingTop: '0.5rem',
-                    fontSize: '0.75rem',
-                    opacity: 0.8
-                  }}>
-                    {job.error ? (
-                      <span style={{ color: 'var(--danger)' }}>ERROR: {job.error}</span>
-                    ) : (
-                      <span>OUTPUT: {job.output_dir}</span>
-                    )}
+        <main>
+          <FlowLauncher apiBase={API_BASE} onJobStarted={fetchJobs} />
+          {loading ? (
+            <div className="text-center py-32 text-text-secondary font-mono border border-dashed border-border rounded-lg bg-bg-card/30">
+              <div className="w-10 h-10 border border-accent border-t-transparent animate-spin mx-auto mb-8"></div>
+              <p>Connecting to backend engine...</p>
+            </div>
+          ) : error ? (
+            <div className="bg-bg-card border border-danger rounded-lg p-6">
+              <p className="text-danger font-mono text-sm">{error}</p>
+            </div>
+          ) : jobs.length === 0 ? (
+            <div className="bg-bg-card/30 border border-dashed border-border rounded-lg p-32 text-center text-text-secondary font-mono">
+              <p>No active jobs.</p>
+              <p className="text-sm mt-2 opacity-60">
+                Run jobs via CLI: <code className="bg-bg-card px-2 py-1 rounded">bimos predict --background</code>
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(400px,1fr))] gap-4">
+              {jobs.map((job) => (
+                <div 
+                  key={job.id} 
+                  className="bg-bg-card border border-border rounded-lg p-6 transition-all duration-200 relative shadow-sm hover:border-border-active hover:shadow-md flex flex-col gap-4 cursor-pointer active:translate-y-[1px]"
+                  onClick={() => setSelectedJobId(job.id)}
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex flex-col gap-2">
+                      <div className="font-mono text-xs text-accent opacity-70">ID_{job.id.substring(0, 8).toUpperCase()}</div>
+                      <div className="text-[1.15rem] font-semibold text-text-primary capitalize leading-none">{job.kind.replace('-', ' ')}</div>
+                    </div>
+                    <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-[2px] text-[0.75rem] font-mono font-medium border ${
+                      job.status === 'running' ? 'text-accent bg-accent-glow border-accent' :
+                      job.status === 'completed' ? 'text-success bg-transparent border-success' :
+                      job.status === 'failed' ? 'text-danger bg-transparent border-danger' :
+                      'text-warning bg-transparent border-warning'
+                    }`}>
+                      {job.status}
+                    </span>
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
+
+                  <div className="text-[0.85rem] text-text-secondary font-mono leading-relaxed">
+                    {formatMeta(job.meta)}
+                  </div>
+
+                  {(job.output_dir || job.error) && (
+                    <div className="border-t border-border pt-4 mt-2 text-[0.75rem] opacity-80 font-mono flex flex-col gap-1">
+                      {job.error ? (
+                        <span className="text-danger">ERROR: {job.error}</span>
+                      ) : (
+                        <span className="text-text-secondary truncate" title={job.output_dir}>OUTPUT: {job.output_dir}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </main>
+
+        {selectedJobId && (
+          <Terminal 
+            jobId={selectedJobId} 
+            onClose={() => setSelectedJobId(null)} 
+            apiBase={API_BASE}
+          />
         )}
-      </main>
-
-      {selectedJobId && (
-        <Terminal 
-          jobId={selectedJobId} 
-          onClose={() => setSelectedJobId(null)} 
-          apiBase={API_BASE}
-        />
-      )}
+      </div>
     </div>
   );
 }

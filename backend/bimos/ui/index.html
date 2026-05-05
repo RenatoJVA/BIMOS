@@ -4,9 +4,30 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
-    <script type="module" crossorigin src="/assets/index-Bz06-daU.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-Bozb9FnJ.css">
+    <title>BIMOS Dashboard</title>
+    <!--
+      Theme bootstrap — runs synchronously before React mounts (no FOUC).
+      Priority: localStorage (user override) → ?systemTheme (Qt desktop)
+                → matchMedia (real browser)
+    -->
+    <script>
+      (function () {
+        var saved = localStorage.getItem('bimos-theme');
+        if (saved === 'dark' || saved === 'light') {
+          document.documentElement.setAttribute('data-theme', saved);
+          return;
+        }
+        var qt = new URLSearchParams(window.location.search).get('systemTheme');
+        if (qt === 'dark' || qt === 'light') {
+          document.documentElement.setAttribute('data-theme', qt);
+          return;
+        }
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-CFSK6Z4Y.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Dt_pgU-e.css">
   </head>
   <body>
     <div id="root"></div>

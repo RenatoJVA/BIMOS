@@ -20,7 +20,10 @@ export function FileDrop({ label, accept, onFileSelect, file }: FileDropProps) {
 
   return (
     <div 
-      className={`file-drop ${isOver ? 'drag-over' : ''} ${file ? 'has-file' : ''}`}
+      className={`w-full border-dashed p-6 rounded-lg text-center cursor-pointer transition-all duration-200 relative bg-bg-card border ${
+        isOver ? 'border-accent bg-bg-card-hover' : 
+        file ? 'border-success border-solid' : 'border-border'
+      } hover:border-accent hover:bg-bg-card-hover`}
       onDragOver={(e) => { e.preventDefault(); setIsOver(true); }}
       onDragLeave={() => setIsOver(false)}
       onDrop={handleDrop}
@@ -30,18 +33,18 @@ export function FileDrop({ label, accept, onFileSelect, file }: FileDropProps) {
         type="file" 
         ref={inputRef}
         accept={accept}
-        style={{ display: 'none' }}
+        className="hidden"
         onChange={(e) => onFileSelect(e.target.files?.[0] || null)}
       />
-      <div className="file-drop-content">
-        <span className="file-drop-label">{label}</span>
-        <span className="file-drop-status">
+      <div className="flex flex-col gap-1">
+        <span className="text-[0.7rem] font-mono text-text-secondary uppercase tracking-widest">{label}</span>
+        <span className="text-[0.8rem] text-text-primary font-medium truncate px-4">
           {file ? file.name : 'Drag & drop or click to upload'}
         </span>
       </div>
       {file && (
         <button 
-          className="file-remove" 
+          className="absolute top-1 right-1 bg-transparent border-none text-text-secondary text-lg cursor-pointer p-1 hover:text-danger" 
           onClick={(e) => { e.stopPropagation(); onFileSelect(null); }}
         >
           &times;

@@ -33,38 +33,38 @@ export function SystemMonitor({ apiBase }: { apiBase: string }) {
   if (!stats) return null;
 
   return (
-    <div className="system-monitor">
-      <div className="stat-item">
-        <div className="stat-label">CPU</div>
-        <div className="stat-bar-container">
-          <div className="stat-bar" style={{ width: `${stats.cpu}%` }}></div>
+    <div className="flex gap-6">
+      <div className="flex flex-col gap-1 min-w-[120px]">
+        <div className="font-mono text-[0.7rem] text-text-secondary uppercase tracking-widest">CPU</div>
+        <div className="h-1 bg-border w-full rounded-[2px] overflow-hidden">
+          <div className="h-full bg-accent transition-[width] duration-500 ease-in-out" style={{ width: `${stats.cpu}%` }}></div>
         </div>
-        <div className="stat-value">{stats.cpu.toFixed(1)}%</div>
+        <div className="font-mono text-[0.85rem] text-text-primary font-medium">{stats.cpu.toFixed(1)}%</div>
       </div>
 
-      <div className="stat-item">
-        <div className="stat-label">RAM</div>
-        <div className="stat-bar-container">
-          <div className="stat-bar" style={{ width: `${stats.memory}%` }}></div>
+      <div className="flex flex-col gap-1 min-w-[120px]">
+        <div className="font-mono text-[0.7rem] text-text-secondary uppercase tracking-widest">RAM</div>
+        <div className="h-1 bg-border w-full rounded-[2px] overflow-hidden">
+          <div className="h-full bg-accent transition-[width] duration-500 ease-in-out" style={{ width: `${stats.memory}%` }}></div>
         </div>
-        <div className="stat-value">{stats.memory.toFixed(1)}%</div>
+        <div className="font-mono text-[0.85rem] text-text-primary font-medium">{stats.memory.toFixed(1)}%</div>
       </div>
 
       {stats.gpu && (
         <>
-          <div className="stat-item">
-            <div className="stat-label">GPU</div>
-            <div className="stat-bar-container">
-              <div className="stat-bar" style={{ width: `${stats.gpu.utilization}%` }}></div>
+          <div className="flex flex-col gap-1 min-w-[120px]">
+            <div className="font-mono text-[0.7rem] text-text-secondary uppercase tracking-widest">GPU</div>
+            <div className="h-1 bg-border w-full rounded-[2px] overflow-hidden">
+              <div className="h-full bg-accent transition-[width] duration-500 ease-in-out" style={{ width: `${stats.gpu.utilization}%` }}></div>
             </div>
-            <div className="stat-value">{stats.gpu.utilization.toFixed(1)}%</div>
+            <div className="font-mono text-[0.85rem] text-text-primary font-medium">{stats.gpu.utilization.toFixed(1)}%</div>
           </div>
-          <div className="stat-item">
-            <div className="stat-label">VRAM</div>
-            <div className="stat-bar-container">
-              <div className="stat-bar" style={{ width: `${stats.gpu.memory_percent}%` }}></div>
+          <div className="flex flex-col gap-1 min-w-[120px]">
+            <div className="font-mono text-[0.7rem] text-text-secondary uppercase tracking-widest">VRAM</div>
+            <div className="h-1 bg-border w-full rounded-[2px] overflow-hidden">
+              <div className="h-full bg-accent transition-[width] duration-500 ease-in-out" style={{ width: `${stats.gpu.memory_percent}%` }}></div>
             </div>
-            <div className="stat-value">{Math.round(stats.gpu.memory_used)} MB</div>
+            <div className="font-mono text-[0.85rem] text-text-primary font-medium">{Math.round(stats.gpu.memory_used)} MB</div>
           </div>
         </>
       )}

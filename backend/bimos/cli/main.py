@@ -36,16 +36,23 @@ def _print(msg: str) -> None:
 
 # ── Root group ────────────────────────────────────────────────────────────────
 
-@click.group()
+@click.group(invoke_without_command=True)
 @click.version_option(version="0.1.0", prog_name="bimos")
 @click.option("--debug", is_flag=True, default=False, help="Enable debug logging.")
 @click.option("--max", is_flag=True, default=False, help="Use all available CPU threads.")
-def cli(debug: bool, max: bool) -> None:
+@click.pass_context
+def cli(ctx: click.Context, debug: bool, max: bool) -> None:
     """BIMOS: Biomolecular Modeling Suite."""
     if debug:
         logging.getLogger("bimos").setLevel(logging.DEBUG)
     settings.max_threads = max
     settings.ensure_dirs()
+
+    # If no subcommand is provided, launch the GUI by default
+    if ctx.invoked_subcommand is None:
+        from bimos.api.server import start_server
+        click.echo("No command specified. Launching BIMOS Desktop UI...")
+        start_server(desktop=True)
 
 
 # ── setup ─────────────────────────────────────────────────────────────────────

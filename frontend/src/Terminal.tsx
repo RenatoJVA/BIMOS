@@ -35,25 +35,27 @@ export function Terminal({ jobId, onClose, apiBase }: TerminalProps) {
   }, [logs]);
 
   return (
-    <div className="terminal-overlay" onClick={onClose}>
-      <div className="terminal-window glass-card" onClick={(e) => e.stopPropagation()}>
-        <div className="terminal-header">
-          <div className="terminal-controls">
-            <span className="control" onClick={onClose}>[CLOSE]</span>
-            <span className="control">[MINIMIZE]</span>
-            <span className="control">[MAXIMIZE]</span>
+    <div className="fixed inset-0 bg-black/85 backdrop-blur-[4px] z-[1000] flex items-center justify-center p-8" onClick={onClose}>
+      <div className="w-full max-w-[1000px] h-[80vh] flex flex-col bg-bg-card border border-border rounded-lg shadow-[0_20px_25px_-5px_rgba(0,0,0,0.4)] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-bg-page p-2 px-4 flex items-center border-b border-border">
+          <div className="flex-1 text-left text-[0.75rem] text-accent font-mono opacity-80 uppercase tracking-widest">
+            BIMOS CORE // CONSOLE // ID_{jobId.substring(0, 8).toUpperCase()}
           </div>
-          <div className="terminal-title">BIMOS CORE // CONSOLE // ID_{jobId.substring(0, 8).toUpperCase()}</div>
         </div>
-        <div className="terminal-body">
+
+        <div className="flex-1 overflow-y-auto p-6 font-mono text-[0.85rem] leading-relaxed text-text-primary custom-scrollbar">
           {loading && logs.length === 0 ? (
-            <div className="terminal-line">Connecting to job output...</div>
+            <div className="flex gap-3 mb-1.5 animate-pulse">
+              <span className="text-accent opacity-50">$</span> Connecting to job output...
+            </div>
           ) : logs.length === 0 ? (
-            <div className="terminal-line">Waiting for output...</div>
+            <div className="flex gap-3 mb-1.5">
+              <span className="text-accent opacity-50">$</span> Waiting for output...
+            </div>
           ) : (
             logs.map((line, i) => (
-              <div key={i} className="terminal-line">
-                <span className="terminal-prompt">$</span> {line}
+              <div key={i} className="flex gap-3 mb-1.5">
+                <span className="text-accent opacity-50 font-bold">$</span> {line}
               </div>
             ))
           )}
