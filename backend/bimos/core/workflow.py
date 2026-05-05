@@ -313,10 +313,20 @@ def run_md_simulation(
             on_output(f"[BIMOS] {msg}")
 
     # Copy files
-    shutil.copy2(pdb, cwd / f"{pdb.stem}.pdb")
+    try:
+        shutil.copy2(pdb, cwd / f"{pdb.stem}.pdb")
+    except shutil.SameFileError:
+        pass
+
     if is_holo:
-        shutil.copy2(ligand_gro, cwd / "ligand.gro")
-        shutil.copy2(ligand_itp, cwd / "ligand.itp")
+        try:
+            shutil.copy2(ligand_gro, cwd / "ligand.gro")
+        except shutil.SameFileError:
+            pass
+        try:
+            shutil.copy2(ligand_itp, cwd / "ligand.itp")
+        except shutil.SameFileError:
+            pass
 
     # Write MDPs (BIMOS defaults if none provided in directory)
     from bimos.core.workflow import _default_mdps
@@ -341,7 +351,7 @@ def run_md_simulation(
             _gmx(["editconf", "-f", f"{pdb.stem}-clean.pdb", "-o", "prot-box.gro", "-d", "1.0", "-bt", "cubic", "-noc"], cwd, on_output)
             box = _get_box(cwd / "prot-box.gro")
             _fix_histidines(cwd / "prot-box.pdb", cwd / "prot-his.pdb", log)
-            _gmx(["pdb2gmx", "-f", "prot-his.pdb", "-o", "prot-pdb2gmx.gro", "-p", f"{comp}.top", "-ff", "oplsaa", "-water", "tip3p", "-ignh", "-merge", "all"], cwd, on_output)
+            _gmx(["pdb2gmx", "-f", "prot-his.pdb", "-o", "prot-pdb2gmx.gro", "-p", f"{comp}.top", "-ff", "oplsaa", "-water", "tip3p", "-ignh"], cwd, on_output)
             mol_name = _inject_topology(cwd / f"{comp}.top", cwd / "ligand.itp")
             _build_complex(cwd / "prot-pdb2gmx.gro", cwd / "ligand.gro", resname, cwd / f"{comp}-raw.gro")
             _gmx(["genrestr", "-f", "ligand.gro", "-o", "ligand-posre.itp", "-fc", "1000", "1000", "1000"], cwd, on_output, f"{resname}\n")
@@ -354,7 +364,7 @@ def run_md_simulation(
         else:
             _gmx(["editconf", "-f", f"{pdb.stem}-clean.pdb", "-o", "pre-box.pdb", "-c", "-d", "1.0", "-bt", "cubic"], cwd, on_output)
             _fix_histidines(cwd / "pre-box.pdb", cwd / "pre-his.pdb", log)
-            _gmx(["pdb2gmx", "-f", "pre-his.pdb", "-o", f"min-{comp}.gro", "-p", f"{comp}.top", "-ff", "oplsaa", "-water", "tip3p", "-ignh", "-merge", "all"], cwd, on_output)
+            _gmx(["pdb2gmx", "-f", "pre-his.pdb", "-o", f"min-{comp}.gro", "-p", f"{comp}.top", "-ff", "oplsaa", "-water", "tip3p", "-ignh"], cwd, on_output)
             _gmx(["solvate", "-cp", f"min-{comp}.gro", "-cs", "spc216.gro", "-o", f"min-{comp}-solv.gro", "-p", f"{comp}.top"], cwd, on_output)
             _gmx(["grompp", "-f", "apo-ions.mdp", "-c", f"min-{comp}-solv.gro", "-p", f"{comp}.top", "-o", f"min-{comp}.tpr", "-maxwarn", "3"], cwd, on_output)
             _gmx(["genion", "-s", f"min-{comp}.tpr", "-o", f"min-{comp}.gro", "-p", f"{comp}.top", "-neutral", "-conc", "0.154004106"], cwd, on_output, "SOL\n")
@@ -381,11 +391,13 @@ def run_md_simulation(
 
         # Extended analysis from user scripts
         for tool, out, inp in [("rms", f"{prefix}-{comp}-rmsd.xvg", "4 4\n"), ("rmsf", f"{prefix}-{comp}-rmsf.xvg", "1\n"), ("gyrate", f"{prefix}-{comp}-gyrate.xvg", "1\n"), ("hbond", f"{prefix}-{comp}-hbnum.xvg", "1\n1\n"), ("sasa", f"{prefix}-{comp}-sasa.xvg", "1\n")]:
-            args = [tool, "-f", f"{tag}-noPBC.xtc", "-s", f"{tag}.tpr", "-o", out]
+            if tool == "hbond":
+                args = [tool, "-f", f"{tag}-noPBC.xtc", "-s", f"{tag}.tpr", "-num", out]
+            else:
+                args = [tool, "-f", f"{tag}-noPBC.xtc", "-s", f"{tag}.tpr", "-o", out]
+
             if tool == "rmsf":
                 args += ["-res", "yes", "-fit", "yes"]
-            if tool == "hbond":
-                args += ["-num", out] # tool specific flag
             if tool == "sasa":
                 args += ["-or", f"{comp}-sasa-res.xvg", "-tv", f"{comp}-sasa-vol.xvg"]
             if ndx:
@@ -397,18 +409,18 @@ def run_md_simulation(
 
 def _default_mdps(is_holo: bool = False) -> dict[str, str]:
     import yaml
-    config_path = Path(__file__).parent.parent / "infrastructure" / "config" / "defaults.yaml"
+    prefix = "holo" if is_holo else "apo"
+    config_path = Path(__file__).parent.parent / "infrastructure" / "config" / f"default_{prefix}.yaml"
     
     try:
         with open(config_path, "r") as f:
             templates = yaml.safe_load(f)
     except Exception as e:
-        logger.error(f"Failed to load defaults.yaml: {e}")
+        logger.error(f"Failed to load {config_path.name}: {e}")
         templates = {}
 
-    prefix = "holo" if is_holo else "apo"
-    # User requirement for test: 1ns (500,000 steps)
-    prod_steps = 500_000
+    # User requirement: 500ns for Apo (250M steps), 100ns for Holo (50M steps)
+    prod_steps = 50_000_000 if is_holo else 250_000_000
     
     result = {}
     for stage_name in ["ions", "min-steep", "min-cg", "nvt", "npt", "sdm"]:
@@ -428,6 +440,11 @@ def _default_mdps(is_holo: bool = False) -> dict[str, str]:
                 v = str(prod_steps)
             elif stage_name in ["nvt", "npt"] and k == "nsteps":
                 v = "5000" # 10ps for fast test
+            
+            # Disable TRR output
+            if k in ["nstxout", "nstvout"]:
+                v = "0"
+            
             lines.append(f"{k:<25} = {v}")
         
         result[key] = "\n".join(lines) + "\n"

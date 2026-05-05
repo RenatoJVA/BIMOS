@@ -15,6 +15,14 @@ def main():
         sys.exit(1)
 
     import os
+    import shutil
+
+    # Clean previous build artifacts to prevent Nuitka AssertionErrors
+    dist_dir = Path("dist")
+    if dist_dir.exists():
+        print("Cleaning previous build artifacts...")
+        shutil.rmtree(dist_dir)
+
     cores = max(1, int((os.cpu_count() or 1) * 0.8))
 
     cmd = [
@@ -30,9 +38,12 @@ def main():
         "--include-package=bimos",
         "--include-package=qtpy",
         "--include-package=webview",
+        "--include-package=rich",
+        "--include-package=rich_click",
         "--enable-plugin=pyqt6",
         # Output configuration
-        "--output-filename=bimos-cli",
+        "--output-dir=dist",
+        "--output-filename=bimos",
         "--assume-yes-for-downloads",
         "--static-libpython=no",
         "main.py"

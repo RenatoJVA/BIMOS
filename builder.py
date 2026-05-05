@@ -44,7 +44,7 @@ def main():
         run_command([sys.executable, "build.py"], cwd=backend_dir)
 
     print_step("Success! BIMOS has been built.")
-    print(f"Executable located at: {backend_dir / 'bimos-cli'}")
+    print(f"Executable located at: {backend_dir / 'dist' / 'bimos'}")
 
 if __name__ == "__main__":
     try:

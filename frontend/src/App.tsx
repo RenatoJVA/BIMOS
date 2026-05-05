@@ -175,15 +175,15 @@ function App() {
             </div>
           )}
         </main>
-
-        {selectedJobId && (
-          <Terminal 
-            jobId={selectedJobId} 
-            onClose={() => setSelectedJobId(null)} 
-            apiBase={API_BASE}
-          />
-        )}
       </div>
+
+      {selectedJobId && (
+        <Terminal 
+          jobId={selectedJobId} 
+          onClose={() => setSelectedJobId(null)} 
+          apiBase={API_BASE}
+        />
+      )}
     </div>
   );
 }
