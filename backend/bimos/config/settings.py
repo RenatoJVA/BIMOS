@@ -1,11 +1,53 @@
 """Centralized configuration for BIMOS."""
 
 import os
+import sys
 import shutil
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+BIMOS_BASE = Path(os.getenv("BIMOS_BASE_PATH", Path.home() / ".bimos")).expanduser().resolve()
+BIMOS_ENV_FILE = BIMOS_BASE / ".env"
+
+if not BIMOS_ENV_FILE.exists():
+    BIMOS_BASE.mkdir(parents=True, exist_ok=True)
+    
+    default_env = f"""# BIMOS Environment Configuration
+# Please edit these paths and settings to match your setup.
+
+# Server
+BIMOS_HOST=127.0.0.1
+BIMOS_PORT=8000
+BIMOS_DEBUG=false
+
+# Container Image
+BIMOS_IMAGE=localhost/bimos/global:latest
+BIMOS_USE_GPU=true
+
+# Database
+BIMOS_DATABASE_URL=postgresql://bimos:bimos@localhost/bimos
+
+# Data Paths
+BIMOS_WORKSPACE={(BIMOS_BASE / "workspace").as_posix()}
+BIMOS_CACHE={(BIMOS_BASE / "cache").as_posix()}
+BIMOS_LOGS={(BIMOS_BASE / "logs").as_posix()}
+BIMOS_ESM_CACHE={(BIMOS_BASE / "cache" / "esm").as_posix()}
+
+# QM Tools (Host Binaries)
+# Provide the absolute path to the executable if installed.
+ORCA_PATH=
+GAUSSIAN_PATH=
+"""
+    BIMOS_ENV_FILE.write_text(default_env)
+    print("============================================================", file=sys.stderr)
+    print(" Welcome to BIMOS! A default configuration has been created:", file=sys.stderr)
+    print(f"   {BIMOS_ENV_FILE}", file=sys.stderr)
+    print(" Please edit this file to configure your workspace and paths,", file=sys.stderr)
+    print(" then launch the software again.", file=sys.stderr)
+    print("============================================================", file=sys.stderr)
+    sys.exit(0)
+
+load_dotenv(BIMOS_ENV_FILE)
 
 
 class Settings:
@@ -19,13 +61,13 @@ class Settings:
     port: int = int(os.getenv("BIMOS_PORT", "8000"))
 
     # Paths
-    base_path: Path = Path.home() / ".bimos"
-    workspace_path: Path = Path.home() / ".bimos" / "workspace"
-    cache_path: Path = Path.home() / ".bimos" / "cache"
-    logs_path: Path = Path.home() / ".bimos" / "logs"
+    base_path: Path = BIMOS_BASE
+    workspace_path: Path = Path(os.getenv("BIMOS_WORKSPACE", str(BIMOS_BASE / "workspace"))).expanduser().resolve()
+    cache_path: Path = Path(os.getenv("BIMOS_CACHE", str(BIMOS_BASE / "cache"))).expanduser().resolve()
+    logs_path: Path = Path(os.getenv("BIMOS_LOGS", str(BIMOS_BASE / "logs"))).expanduser().resolve()
 
     # ESM model cache
-    esm_cache_path: Path = Path.home() / ".bimos" / "cache" / "esm"
+    esm_cache_path: Path = Path(os.getenv("BIMOS_ESM_CACHE", str(BIMOS_BASE / "cache" / "esm"))).expanduser().resolve()
     esm_model_url: str = "https://colabfold.steineggerlab.workers.dev/esm/esmfold.model"
 
     # Container image

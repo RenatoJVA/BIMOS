@@ -96,10 +96,10 @@ def run_orca_pipeline(
 ) -> dict:
     """Run the full ORCA Hirshfeld pipeline on a directory."""
     dir_path = pathlib.Path(directory).resolve()
-    orca_bin = settings.orca_path or "/home/ciim/orca_6_0_1/orca"
+    orca_bin = settings.orca_path
     
-    if not pathlib.Path(orca_bin).exists():
-        raise FileNotFoundError(f"ORCA binary not found at {orca_bin}")
+    if not orca_bin or not pathlib.Path(orca_bin).exists():
+        raise FileNotFoundError(f"ORCA binary not found. Please configure ORCA_PATH in your .env file.")
 
     def log(msg: str):
         logger.info(msg)
@@ -221,10 +221,10 @@ def run_gaussian_pipeline(
 ) -> dict:
     """Run the full Gaussian Hirshfeld pipeline on a directory."""
     dir_path = pathlib.Path(directory).resolve()
-    g16_bin = settings.gaussian_path or "/opt/g16/g16"
+    g16_bin = settings.gaussian_path
     
-    if not pathlib.Path(g16_bin).exists():
-        raise FileNotFoundError(f"Gaussian binary not found at {g16_bin}")
+    if not g16_bin or not pathlib.Path(g16_bin).exists():
+        raise FileNotFoundError(f"Gaussian binary not found. Please configure GAUSSIAN_PATH in your .env file.")
 
     def log(msg: str):
         logger.info(msg)

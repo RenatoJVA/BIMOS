@@ -37,11 +37,7 @@ async def get_system_theme():
 # Resolve path to UI assets (works natively and inside Nuitka)
 BASE_DIR = Path(__file__).resolve().parent.parent
 UI_DIR = BASE_DIR / "ui"
-print(f"[DEBUG] UI_DIR resolved to: {UI_DIR}")
-if UI_DIR.exists():
-    print(f"[DEBUG] UI_DIR exists. Contents: {os.listdir(UI_DIR)}")
-else:
-    print("[DEBUG] UI_DIR does NOT exist at that path.")
+
 
 if UI_DIR.exists() and UI_DIR.is_dir():
     # Mount the frontend assets at root for direct access
@@ -145,7 +141,6 @@ def start_server(host: str = "127.0.0.1", port: int = 8000, desktop: bool = True
     is_dark = _detect_system_dark_mode()
     system_theme = "dark" if is_dark else "light"
     bg_color = "#000000" if is_dark else "#f5f5f5"
-    print(f"[DEBUG] Detected system theme: {system_theme}", flush=True)
 
     # Create native desktop window via pywebview
     import webview
@@ -173,5 +168,8 @@ def start_server(host: str = "127.0.0.1", port: int = 8000, desktop: bool = True
     )
 
     # Start the native UI event loop forcing QT
-    # debug=False helps suppress some Chromium logs
     webview.start(gui="qt", debug=False)
+
+    # Exiting abruptly to bypass QtWebEngine memory cleanup which triggers a Nuitka segfault.
+    # The moment webview window is closed, it returns here.
+    os._exit(0)
