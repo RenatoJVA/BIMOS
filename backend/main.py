@@ -12,11 +12,10 @@ from bimos.cli.main import cli
 
 
 def main() -> None:
-    # Special keyword or no arguments to directly launch GUI mode
-    if len(sys.argv) == 1:
-        sys.argv = [sys.argv[0], "gui"]
-    elif len(sys.argv) == 2 and sys.argv[1] == "BIMOS_GUI":
-        sys.argv = [sys.argv[0], "gui"]
+    # If the application is launched as a desktop shortcut with BIMOS_GUI, start the GUI.
+    # Otherwise, let click handle the arguments (showing help on no args).
+    if len(sys.argv) == 2 and sys.argv[1] == "BIMOS_GUI":
+        sys.argv = [sys.argv[0], "-g"]
 
     cli()
 

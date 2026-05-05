@@ -27,6 +27,7 @@ dependencies = [
     "zstandard>=0.25.0",
     "pyyaml>=6.0.3",
     "psutil>=5.9.0",
+    "rich-click>=1.9.7",
 ]
 
 [project.scripts]
