@@ -148,9 +148,17 @@ def start_server(host: str = "127.0.0.1", port: int = 8000, desktop: bool = True
     # Environment variables to fix common rendering issues on Linux
     os.environ["QTWEBENGINE_DISABLE_GBM"] = "1"
     os.environ["QT_XCB_GL_INTEGRATION"] = "none"
+    os.environ["QT_QUICK_BACKEND"] = "software"
+    os.environ["LIBGL_ALWAYS_SOFTWARE"] = "1"
+
+    # Silence Qt and X11 warnings (especially the "Cannot create platform OpenGL context" one)
+    os.environ["QT_LOGGING_RULES"] = (
+        "qt.qpa.xcb.gl=false;qt.qpa.gl=false;qt.quick.backend=false;*.debug=false;*.critical=false;*=false"
+    )
+
     # Disable GPU to fully avoid GBM/Vulkan fallback warnings if drivers are problematic
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
-        "--disable-gpu --disable-software-rasterizer --num-raster-threads=4"
+        "--disable-gpu --num-raster-threads=4 --log-level=3 --silent --disable-logging"
     )
 
     # Pass the detected system theme as a URL query parameter.

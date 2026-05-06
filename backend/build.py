@@ -34,6 +34,8 @@ def main():
         "--include-data-dir=bimos/ui=bimos/ui",
         "--include-data-dir=bimos/scripts=bimos/scripts",
         "--include-data-dir=bimos/infrastructure/config=bimos/infrastructure/config",
+        "--include-data-dir=dockers=dockers",
+        "--include-data-file=bimos/cli/manual.yaml=bimos/cli/manual.yaml",
         # Ensure packages are traced
         "--include-package=bimos",
         "--include-package=qtpy",

@@ -12,6 +12,8 @@ import threading
 from pathlib import Path
 
 import rich_click as click
+import yaml
+
 from rich.console import Console
 from rich.markdown import Markdown
 
@@ -93,44 +95,22 @@ def cli(ctx: click.Context, debug: bool, max: bool, gui: bool, manual: bool, hos
     """
     if manual:
         console = Console()
-        manual_text = """
-# BIMOS CLI Manual
-
-BIMOS (Biomolecular Modeling Suite) is a high-performance toolkit for structural biology and quantum chemistry.
-This CLI follows standard POSIX conventions.
-
-## 1. Core Concepts
-
-* **Jobs**: Every calculation (docking, prediction, etc.) is tracked as a job. Use `bimos jobs` to see them.
-* **Background Execution**: Most commands block the terminal by default. To run them in the background, use standard Unix `&` or the built-in `-b` flag if available in the command.
-* **Desktop UI**: You can start the full GUI at any time using `bimos -g`. 
-
-## 2. Protein Structure Prediction
-
-Predict 3D structures from FASTA files.
-* **ESMFold**: `bimos predict sequence.fasta -o output_dir/`
-* **Boltz-1**: `bimos predict-boltz sequence.fasta -n 5`
-
-## 3. Molecular Docking & Simulation
-
-* **Docking (Vina)**: `bimos dock protein.pdb ligands.sdf -o results/`
-* **MD Simulation (GROMACS)**: `bimos workflow -p protein.pdb --ligand-gro lig.gro --ligand-itp lig.itp`
-
-## 4. Quantum Mechanics
-
-Run charge computations or structure optimizations.
-* **Gaussian 16 Pipeline**: `bimos qm-g16 ./ligands_dir -j 4`
-* **ORCA Pipeline**: `bimos qm-orca ./ligands_dir -j 4`
-
-## 5. Troubleshooting & Logs
-
-To view detailed logs for a specific background job:
-`bimos jobs -l <JOB_ID>`
-
-Enable debug output for any command:
-`bimos --debug <COMMAND>`
-"""
-        console.print(Markdown(manual_text))
+        manual_path = Path(__file__).parent / "manual.yaml"
+        if manual_path.exists():
+            with open(manual_path, "r") as f:
+                data = yaml.safe_load(f)
+            
+            m = data.get("manual", {})
+            text = f"{m.get('title', '# BIMOS Manual')}\n\n"
+            text += f"{m.get('description', '')}\n\n"
+            for section in m.get("sections", []):
+                text += f"{section.get('title', '## Section')}\n"
+                text += f"{section.get('content', '')}\n\n"
+            text += f"---\n{m.get('footer', '')}"
+            console.print(Markdown(text))
+        else:
+            console.print(f"[red]Manual file not found at: {manual_path}[/red]")
+            console.print("[yellow]Ensure the file was included in the build (check build.py).[/yellow]")
         ctx.exit()
 
     if debug:
