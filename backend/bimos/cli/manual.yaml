@@ -1,0 +1,49 @@
+manual:
+  title: "# BIMOS CLI Manual"
+  description: "BIMOS (Biomolecular Modeling Suite) is a high-performance toolkit for structural biology and quantum chemistry."
+  footer: "For more information, visit the official documentation or use `bimos --help`."
+  sections:
+    - title: "## 1. Core Concepts"
+      content: |
+        * **Jobs**: Every calculation (docking, prediction, etc.) is tracked as a job. Use `bimos jobs` to see them.
+        * **Background Execution**: Most commands block the terminal by default. To run them in the background, use standard Unix `&` or the built-in `-b` flag if available in the command.
+        * **CPU Optimization**: Use the `--max` flag to force the use of all available CPU cores/threads across all subcommands. This is ideal for HPC environments.
+        * **Desktop UI**: You can start the full GUI at any time using `bimos -g`.
+
+    - title: "## 2. Protein Structure Prediction"
+      content: |
+        Predict 3D structures from FASTA sequences using AI-driven folding models.
+        * **ESMFold**: `bimos predict sequence.fasta -o output_dir/`
+        * **Boltz-1**: `bimos predict-boltz sequence.fasta -n 5`
+
+    - title: "## 3. Molecular Docking & Simulation"
+      content: |
+        ### 3.1. Docking (Vina/Autodock)
+        Perform molecular docking of one or more ligands against a protein.
+        * **Example**: `bimos dock protein.pdb ligands.sdf -o results/`
+        * **Multiple Ligands**: The SDF file can contain multiple molecules; BIMOS will dock each one.
+
+        ### 3.2. MD Simulation Workflows (GROMACS)
+        BIMOS automates the entire GROMACS pipeline (Preparation, Solvation, Ionization, Minimization, NVT, NPT, Production, and Analysis).
+
+        * **APO Simulation** (Protein only):
+          `bimos workflow -p protein.pdb`
+        * **HOLO Simulation** (Protein + Ligand):
+          `bimos workflow -p protein.pdb --ligand-gro lig.gro --ligand-itp lig.itp`
+          *Note: Ensure the ligand topology (.itp) and coordinates (.gro) are compatible with the forcefield.*
+
+    - title: "## 4. Quantum Mechanics (QM)"
+      content: |
+        Run charge computations, structure optimizations, or energy calculations using Gaussian 16 or ORCA.
+        * **Gaussian 16 Pipeline**: `bimos qm-g16 ./ligands_dir -j 4`
+        * **ORCA Pipeline**: `bimos qm-orca ./ligands_dir -j 4`
+        * **Note**: These commands require the respective binaries to be installed and accessible in your PATH.
+
+    - title: "## 5. Troubleshooting & Logs"
+      content: |
+        * **View Logs**: To view detailed logs for a specific background job:
+          `bimos jobs -l <JOB_ID>`
+        * **Debug Mode**: Enable verbose output for any command:
+          `bimos --debug <COMMAND>`
+        * **Database Reset**: If you encounter state issues, you can reset the job database:
+          `bimos db reset`
