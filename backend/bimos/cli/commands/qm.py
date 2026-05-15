@@ -10,7 +10,7 @@ from bimos.infrastructure.job_store import store
 @click.option("--gui", "-g", is_flag=True, help="Open GUI dashboard.")
 def qm_orca(directory: str, jobs: int, charge: int, background: bool, gui: bool) -> None:
     """Run full ORCA Hirshfeld pipeline on a directory of .gro files."""
-    from bimos.core.qm import run_orca_pipeline
+    from bimos.quantum_chemistry import run_orca_pipeline
 
     job = store.create(kind="qm-orca", meta={"dir": directory}, output_dir="")
     click.echo(f"Job ID: {job.id}")
@@ -62,7 +62,7 @@ def qm_orca(directory: str, jobs: int, charge: int, background: bool, gui: bool)
 @click.option("--gui", "-g", is_flag=True, help="Open GUI dashboard.")
 def qm_g16(directory: str, jobs: int, charge: int, background: bool, gui: bool) -> None:
     """Run full Gaussian Hirshfeld pipeline on a directory of .gro files."""
-    from bimos.core.qm import run_gaussian_pipeline
+    from bimos.quantum_chemistry import run_gaussian_pipeline
 
     job = store.create(kind="qm-g16", meta={"dir": directory}, output_dir="")
     click.echo(f"Job ID: {job.id}")

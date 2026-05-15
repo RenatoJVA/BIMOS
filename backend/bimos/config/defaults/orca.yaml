@@ -1,0 +1,11 @@
+# ORCA QM (Hirshfeld charges) — safe user-tunable parameters.
+
+orca:
+  method: CAM-B3LYP
+  basis: def2-TZVP
+  maxcore_mb: 32000
+  max_iter: 512
+  max_jobs: 2
+
+job:
+  charge: 0

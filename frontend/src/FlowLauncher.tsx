@@ -1,12 +1,20 @@
 import { useState } from 'react';
 import { FileDrop } from './FileDrop';
+import { ConfigBar } from './ConfigBar';
 
 interface FlowLauncherProps {
   apiBase: string;
+  maxResources: boolean;
+  onMaxResourcesChange: (value: boolean) => void;
   onJobStarted: () => void;
 }
 
-export function FlowLauncher({ apiBase, onJobStarted }: FlowLauncherProps) {
+export function FlowLauncher({
+  apiBase,
+  maxResources,
+  onMaxResourcesChange,
+  onJobStarted,
+}: FlowLauncherProps) {
   const [activeFlow, setActiveFlow] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -29,7 +37,11 @@ export function FlowLauncher({ apiBase, onJobStarted }: FlowLauncherProps) {
       const res = await fetch(`${apiBase}/predict`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fasta_content: fasta, name: name || 'protein_job' }),
+        body: JSON.stringify({
+          fasta_content: fasta,
+          name: name || 'protein_job',
+          max_resources: maxResources,
+        }),
       });
       if (res.ok) {
         setActiveFlow(null);
@@ -51,6 +63,7 @@ export function FlowLauncher({ apiBase, onJobStarted }: FlowLauncherProps) {
     const formData = new FormData();
     formData.append('protein', proteinFile);
     formData.append('ligands', ligandsFile);
+    formData.append('max_resources', String(maxResources));
 
     try {
       const res = await fetch(`${apiBase}/dock`, {
@@ -78,6 +91,7 @@ export function FlowLauncher({ apiBase, onJobStarted }: FlowLauncherProps) {
     formData.append('gro', groFile);
     formData.append('itp', itpFile);
     formData.append('charge', String(charge));
+    formData.append('max_resources', String(maxResources));
 
     try {
       const res = await fetch(`${apiBase}/qm-orca-files`, {
@@ -105,7 +119,8 @@ export function FlowLauncher({ apiBase, onJobStarted }: FlowLauncherProps) {
     setLoading(true);
     const formData = new FormData();
     formData.append('protein', proteinFile);
-    
+    formData.append('max_resources', String(maxResources));
+
     let endpoint = `${apiBase}/simulate`;
     if (mdType === 'holo') {
       endpoint = `${apiBase}/simulate-holo`;
@@ -134,6 +149,12 @@ export function FlowLauncher({ apiBase, onJobStarted }: FlowLauncherProps) {
 
   return (
     <div className="mb-12 animate-[fadeIn_0.6s_ease-out]">
+      <ConfigBar
+        apiBase={apiBase}
+        activeFlow={activeFlow}
+        maxResources={maxResources}
+        onMaxResourcesChange={onMaxResourcesChange}
+      />
       <div className="flex gap-4 mb-6">
         <button 
           className={`px-5 py-2.5 rounded-lg border font-medium text-[0.85rem] transition-all duration-200 cursor-pointer ${

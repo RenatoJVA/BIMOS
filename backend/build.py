@@ -2,16 +2,20 @@
 BIMOS Nuitka Build Script.
 Compiles the application into a standalone CLI/Desktop executable.
 """
+
 import subprocess
 import sys
 from pathlib import Path
+
 
 def main():
     print("Building BIMOS with Nuitka...")
     # Ensure frontend UI is present
     if not (Path("bimos") / "ui" / "index.html").exists():
         print("Error: Frontend UI not found in bimos/ui/")
-        print("Run 'bun run build' in frontend/ and copy 'dist/' to 'backend/bimos/ui/'")
+        print(
+            "Run 'bun run build' in frontend/ and copy 'dist/' to 'backend/bimos/ui/'"
+        )
         sys.exit(1)
 
     import os
@@ -26,7 +30,9 @@ def main():
     cores = max(1, int((os.cpu_count() or 1) * 0.8))
 
     cmd = [
-        sys.executable, "-m", "nuitka",
+        sys.executable,
+        "-m",
+        "nuitka",
         f"--jobs={cores}",
         "--standalone",
         "--onefile",
@@ -35,6 +41,7 @@ def main():
         "--include-data-dir=bimos/scripts=bimos/scripts",
         "--include-data-dir=bimos/infrastructure/config=bimos/infrastructure/config",
         "--include-data-dir=bimos/infrastructure/data=bimos/infrastructure/data",
+        "--include-data-dir=bimos/config/defaults=bimos/config/defaults",
         "--include-data-dir=dockers=dockers",
         "--include-data-file=bimos/cli/manual.yaml=bimos/cli/manual.yaml",
         # Ensure packages are traced
@@ -49,11 +56,12 @@ def main():
         "--output-filename=bimos",
         "--assume-yes-for-downloads",
         "--static-libpython=no",
-        "main.py"
+        "main.py",
     ]
-    
+
     print(f"Running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
+
 
 if __name__ == "__main__":
     main()

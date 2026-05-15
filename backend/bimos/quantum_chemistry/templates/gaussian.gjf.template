@@ -1,0 +1,10 @@
+%chk=$chk_name
+%mem=$mem
+%nprocshared=$nprocs
+# $route
+
+$title
+
+$charge $multiplicity
+$coordinates
+

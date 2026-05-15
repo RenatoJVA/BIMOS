@@ -1,0 +1,9 @@
+# Gaussian QM (Hirshfeld charges) — safe user-tunable parameters.
+
+gaussian:
+  route: "cam-b3lyp tzvp pop=hirshfeld scf=(xqc,maxcycle=512)"
+  mem: 32GB
+  max_jobs: 2
+
+job:
+  charge: 0

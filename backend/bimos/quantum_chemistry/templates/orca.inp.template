@@ -1,0 +1,16 @@
+! $method $basis TightSCF RIJCOSX
+
+%pal nprocs $nprocs end
+%maxcore $maxcore
+
+%scf
+  MaxIter $max_iter
+end
+
+%output
+  Print[P_Hirshfeld] 1
+end
+
+* xyz $charge $multiplicity
+$coordinates
+*

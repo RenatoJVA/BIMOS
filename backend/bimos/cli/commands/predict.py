@@ -10,7 +10,7 @@ from bimos.infrastructure.job_store import store
 @click.option("--gui", "-g", is_flag=True, help="Open the GUI dashboard for monitoring.")
 def predict(fasta_file: str, output: str, recycles: int, background: bool, gui: bool) -> None:
     """Predict protein structure from a FASTA file using ESMFold."""
-    from bimos.core.protein import predict_structure
+    from bimos.prediction import predict_structure
 
     job = store.create(kind="predict", meta={"fasta": fasta_file}, output_dir=output or "")
     click.echo(f"Job ID: {job.id}")
@@ -70,7 +70,7 @@ def predict(fasta_file: str, output: str, recycles: int, background: bool, gui: 
 @click.option("--gui", "-g", is_flag=True, help="Open the GUI dashboard for monitoring.")
 def predict_boltz(fasta_file: str, output: str, models: int, background: bool, gui: bool) -> None:
     """Predict protein structure from a FASTA file using Boltz-1."""
-    from bimos.core.boltz import predict_boltz
+    from bimos.prediction import predict_boltz
 
     job = store.create(kind="predict-boltz", meta={"fasta": fasta_file}, output_dir=output or "")
     click.echo(f"Job ID: {job.id}")
