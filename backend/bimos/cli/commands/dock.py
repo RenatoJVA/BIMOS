@@ -12,7 +12,7 @@ from bimos.infrastructure.job_store import store
 @click.option("--gui", "-g", is_flag=True, help="Open the GUI dashboard for monitoring.")
 def dock(protein_pdb: str, ligands_input: str, dataset: bool, output: str, background: bool, gui: bool) -> None:
     """Run molecular docking pipeline (Protein PDB + Ligands SDF/Dataset -> best poses)."""
-    from bimos.core.docking import run_docking_pipeline
+    from bimos.docking import run_docking_pipeline
     from bimos.infrastructure.chembl_db import export_to_sdf, get_available_datasets
     import os
     import tempfile

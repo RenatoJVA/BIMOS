@@ -39,6 +39,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["bimos"]
+include = ["bimos/config/defaults/*"]
 
 [dependency-groups]
 dev = [

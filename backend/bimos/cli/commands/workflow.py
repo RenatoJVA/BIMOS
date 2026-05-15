@@ -11,7 +11,7 @@ from bimos.infrastructure.job_store import store
 @click.option("--gui", "-g", is_flag=True, help="Open the GUI dashboard for monitoring.")
 def workflow(pdb_file: str, ligand_gro: str, ligand_itp: str, output: str, background: bool, gui: bool) -> None:
     """Run a GROMACS MD simulation (Prep -> Min -> NVT -> NPT -> SDM -> Analysis)."""
-    from bimos.core.workflow import run_md_simulation
+    from bimos.molecular_dynamics import run_md_simulation
 
     is_holo = bool(ligand_gro and ligand_itp)
     kind = "workflow-holo" if is_holo else "workflow-apo"

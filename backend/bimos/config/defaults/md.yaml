@@ -1,0 +1,14 @@
+# Molecular dynamics (GROMACS) — safe user-tunable parameters.
+
+simulation:
+  sdm_steps_holo: 50000000
+  sdm_steps_apo: 250000000
+  nvt_npt_steps: 5000
+  ion_concentration: "0.154004106"
+  box_distance: "1.0"
+  max_min_iterations: 15
+
+prep:
+  forcefield: oplsaa
+  water_model: tip3p
+  solvent_gro: spc216.gro

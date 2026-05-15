@@ -1,0 +1,4 @@
+# ESMFold structure prediction — safe user-tunable parameters.
+
+prediction:
+  num_recycles: 3

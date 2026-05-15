@@ -8,8 +8,23 @@ def _print(msg: str) -> None:
 
 @click.command("setup")
 @click.option("--force", is_flag=True, help="Force rebuild even if image exists.")
-def setup(force: bool) -> None:
-    """Build the bimos/global:latest container image."""
+@click.option("--config-only", is_flag=True, help="Only create/update user YAML configs in ~/.bimos/config/.")
+def setup(force: bool, config_only: bool) -> None:
+    """Build the container image and bootstrap user configuration."""
+    from bimos.shared.user_config import ensure_user_configs, is_custom, user_config_dir
+
+    settings.ensure_dirs()
+    config_dir = user_config_dir()
+    click.echo(f"User config directory: {config_dir}")
+    for name in ("docking", "md", "esmfold", "boltz", "orca", "gaussian"):
+        path = config_dir / f"{name}.yaml"
+        status = "custom" if is_custom(name) else "default"
+        click.echo(f"  {path.name}: {status}")
+    click.echo("Profiles: default (packaged) | custom (edited YAML) | max (bimos --max)")
+
+    if config_only:
+        return
+
     from bimos.infrastructure.container import build_image, image_exists
 
     tag = settings.bimos_image

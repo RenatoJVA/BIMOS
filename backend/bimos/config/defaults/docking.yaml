@@ -1,0 +1,20 @@
+# Docking (AutoDock Vina) — safe user-tunable parameters.
+# Edit values here; invalid entries are clamped to safe ranges.
+
+vina:
+  times: 10
+  margin: 1.0
+  num_modes: 20
+  exhaustiveness: 12
+  energy_range: 3.0
+  cpu_per_job: 4
+
+grid:
+  # auto: box from receptor coordinates | manual: use center/size below
+  mode: auto
+  center_x: null
+  center_y: null
+  center_z: null
+  size_x: null
+  size_y: null
+  size_z: null
