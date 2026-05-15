@@ -1,105 +1,140 @@
 # BIMOS User Manual
 ## Biomolecular Modeling Suite
 
-BIMOS is a high-performance suite for biomolecular modeling, including structure prediction, molecular docking, and MD simulations.
+BIMOS is a modern, high-performance toolkit designed to unify structural biology and quantum chemistry pipelines. It provides an intuitive CLI and a powerful Desktop Dashboard to orchestrate tasks across structure prediction, molecular dynamics (MD), molecular docking, and virtual screening.
 
 ---
 
-## 1. Installation
+## 1. Important Execution Guidelines
 
-### 🐧 Linux (Debian/Ubuntu)
-BIMOS is distributed as a `.deb` package for easy installation.
-
-1. **Download** the latest `.deb` from the releases page.
-2. **Install** using `dpkg` or `apt`:
-   ```bash
-   sudo apt update
-   sudo apt install ./bimos_1.0.0_amd64.deb
-   ```
-3. **Dependencies**: BIMOS requires Docker for containerized workflows (GROMACS, ESMFold).
-   ```bash
-   sudo apt install docker.io
-   sudo usermod -aG docker $USER
-   ```
-
-### 🪟 Windows
-For Windows, BIMOS provides a standalone installer.
-
-1. **Download** `BIMOS_Setup.exe`.
-2. **Run the installer** and follow the prompts.
-3. **WSL2 Recommendation**: For maximum performance, it is recommended to have WSL2 and Docker Desktop installed.
-4. **Environment**: The installer will automatically add `bimos-cli` to your PATH.
-
-### 🍎 macOS
-BIMOS supports macOS via a portable binary or Homebrew.
-
-1. **Direct Download**: Download `bimos-macos.zip`, extract, and move `bimos` to `/usr/local/bin`.
-2. **Permissions**: You may need to allow the app in "System Settings > Privacy & Security" since it's a CLI tool.
-3. **Docker**: Install [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/) to run simulations.
+> [!IMPORTANT]
+> **Always run BIMOS globally.** 
+> Once installed or compiled, the executable is available system-wide as `bimos`. 
+> You should **never** execute scripts directly from the `./backend` folder. Navigate to your project or workspace directory and use the `bimos` command.
 
 ---
 
-## 2. Quick Start
+## 2. Quick Start & Core Workflows
 
-### Structural Prediction (ESMFold)
-Predict the 3D structure of a protein from its sequence:
+### 2.1 Virtual Screening & Built-in Databases
+BIMOS includes curated local databases ready for massive virtual screening, eliminating the need to prepare your own ligand datasets manually.
+
+Available Datasets:
+- `candidates_1000`: Mixed curated subset of drugs and phytocompounds.
+- `phytocompounds_300`: Exclusive collection of 300 regional phytocompounds.
+
+**Search the Database:**
+Query compounds by name, SMILES, or ChEMBL ID, and evaluate their properties (MW, LogP, DrugLikeness):
 ```bash
-bimos-cli predict --fasta protein.fasta --name my_protein
+bimos db query "acid" --dataset phytocompounds_300
 ```
 
-### Molecular Docking
-Dock a ligand into a protein structure:
+**Export a Dataset:**
+Export the full dataset into an SDF file for external use:
 ```bash
-bimos-cli dock protein.pdb ligands.sdf --times 10
+bimos db export candidates_1000 ./my_screening_ligands.sdf
 ```
 
-### Molecular Dynamics (GROMACS)
-Run a full MD pipeline (Prep -> Min -> NVT -> NPT -> Production):
+### 2.2 Molecular Docking (Vina)
+Perform molecular docking using custom ligands or directly from our curated virtual screening databases. BIMOS will automatically handle 2D to 3D conformation generation and grid calculations.
+
+**Standard Docking (Custom SDF):**
 ```bash
-bimos-cli simulate protein.pdb
+bimos dock target_protein.pdb my_ligands.sdf --times 10
 ```
 
-### Quantum Mechanics (QM)
-Run automated Hirshfeld charge pipelines using ORCA or Gaussian:
+**Direct Virtual Screening (Using built-in dataset):**
+Launch a full virtual screening campaign bypassing manual SDF creation:
 ```bash
-# Full ORCA pipeline for a directory of .gro files
-bimos-cli qm-orca /path/to/directory --jobs 2 --charge 0
-
-# Full Gaussian pipeline for a directory of .gro files
-bimos-cli qm-g16 /path/to/directory --jobs 2 --charge 1
+bimos dock target_protein.pdb candidates_1000 --dataset --gui
 ```
-*Note: These pipelines automatically update your .itp files with the calculated Hirshfeld charges.*
+
+### 2.3 Structural Prediction (AI Folding)
+Predict the 3D structure of a protein directly from its amino acid sequence using integrated AI models.
+```bash
+bimos predict --fasta sequence.fasta --name my_protein
+```
+
+### 2.4 Molecular Dynamics (GROMACS)
+BIMOS automates the entire GROMACS simulation pipeline (Topology Prep, Solvation, Ionization, Minimization, NVT, NPT, and Production).
+```bash
+bimos workflow -p protein.pdb
+```
+
+### 2.5 Quantum Mechanics (QM)
+Automate Hirshfeld charge generation and structure optimization pipelines. These workflows update your `.itp` files dynamically with calculated QM charges.
+```bash
+# ORCA Pipeline (Multiple threads)
+bimos qm-orca ./ligands_dir -j 4 --charge 0
+
+# Gaussian 16 Pipeline
+bimos qm-g16 ./ligands_dir -j 4 --charge 1
+```
 
 ---
 
-## 3. The Dashboard (GUI)
+## 3. The Desktop Dashboard (GUI)
 
-BIMOS includes a real-time monitoring dashboard. To launch it along with any command, use the `--gui` flag:
+BIMOS provides a beautiful, real-time Desktop UI to track and monitor all background and foreground processes. 
 
+To launch the standalone dashboard:
 ```bash
-bimos-cli dock protein.pdb ligands.sdf --gui
+bimos -g
+```
+
+To run a command and immediately open the dashboard to monitor it:
+```bash
+bimos dock protein.pdb candidates_1000 --dataset -g
 ```
 
 ### Dashboard Features:
-- **Live Job Tracking**: Monitor the status of all active and past jobs.
-- **Terminal Simulation**: Click on any job in the dashboard to open a **live console** and see the exact output of the simulation/docking process.
-- **Visual Feedback**: Real-time progress badges and error reporting.
+- **Live Job Tracking**: Monitor the status of all active and historical jobs in real-time.
+- **Terminal Simulation**: Click on any running job to access a live streaming console showing exact output from GROMACS, Vina, or AI folding models.
+- **Theme Sync**: The dashboard automatically synchronizes with your host OS theme (Dark/Light mode).
 
 ---
 
-## 4. Configuration
+## 4. Job Management & Background Execution
 
-BIMOS uses a `.env` file or environment variables for configuration.
-- `WORKSPACE_PATH`: Where results are stored (Default: `~/bimos_workspace`)
-- `ORCA_PATH`: Full path to ORCA binary (supports `$HOME`).
-- `GAUSSIAN_PATH`: Full path to Gaussian binary (g16/g09).
-- `BIMOS_IMAGE`: The container image used for simulations.
-- `BIMOS_USE_GPU`: Set to `true` to enable GPU offloading for MD and folding.
+BIMOS is designed to run massively parallel tasks without freezing your terminal.
+
+**Running in Background:**
+Any long-running command can be sent to the background by appending `-b` or `--background`.
+```bash
+bimos dock protein.pdb phytocompounds_300 --dataset -b
+```
+The CLI will return immediately with a `Job ID`, allowing you to close the terminal or launch more jobs.
+
+**Managing Jobs via CLI:**
+You can list all jobs, view their status, or check logs directly from the terminal.
+```bash
+bimos jobs               # List all jobs and their statuses
+bimos jobs -l <JOB_ID>   # View logs for a specific job
+```
+
+**Canceling a Job (Kill):**
+If you need to stop a running job and release its resources (RAM, GPU), you can instantly terminate it and destroy all associated containers:
+```bash
+bimos jobs kill <JOB_ID>
+```
+*Note: Jobs can also be canceled seamlessly from the Desktop Dashboard by closing or deleting the job card.*
+
+---
+
+## 5. Configuration (.env)
+
+When BIMOS is launched for the first time, it generates a `.env` configuration file in your home directory (`~/.bimos/.env`).
+
+Key variables you can customize:
+- `BIMOS_WORKSPACE`: Where calculation results and logs are stored.
+- `ORCA_PATH` / `GAUSSIAN_PATH`: Absolute paths to host QM binaries.
+- `BIMOS_IMAGE`: The container image name for containerized MD/Folding execution.
+- `BIMOS_REMOTE_URL`: *(Thin Client Mode)* Set this to connect the local UI to a remote BIMOS engine API. Leave commented/blank for local execution.
 
 ---
 
 ## 5. Troubleshooting
 
-- **Docker Permission Denied**: Ensure your user is in the `docker` group.
-- **Segment Fault (Nuitka)**: If running the compiled binary, ensure your system has compatible graphics drivers for the GUI (Vulkan/OpenGL).
-- **Backend Connection Error**: Ensure the BIMOS engine is running. The dashboard connects to `localhost:8000`.
+- **White Screen on Launch**: If you launch the GUI (`bimos -g`) and see a white screen, check your `~/.bimos/.env` file. If `BIMOS_REMOTE_URL` is enabled but the remote server is unreachable, the UI will stall. Comment it out to run locally.
+- **Segment Fault (Linux)**: Some Linux distributions lack compatible OpenGL libraries for the desktop interface. BIMOS attempts to enforce software rendering automatically, but ensure your display server supports standard rendering.
+- **Docker Permission Denied**: BIMOS requires Docker/Podman to run simulations. Ensure your user belongs to the `docker` group (`sudo usermod -aG docker $USER`).

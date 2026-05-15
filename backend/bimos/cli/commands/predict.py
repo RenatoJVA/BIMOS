@@ -45,8 +45,20 @@ def predict(fasta_file: str, output: str, recycles: int, background: bool, gui: 
         click.echo("Starting prediction and opening dashboard...")
         start_server(desktop=True)
     elif background:
+        import os
+        import sys
         click.echo("Running in background. Use 'bimos jobs' to check status.")
-        threading.Thread(target=_run, daemon=True).start()
+        if os.fork() > 0:
+            sys.exit(0)
+        os.setsid()
+        if os.fork() > 0:
+            sys.exit(0)
+        with open(os.devnull, 'r') as f:
+            os.dup2(f.fileno(), sys.stdin.fileno())
+        with open(os.devnull, 'a+') as f:
+            os.dup2(f.fileno(), sys.stdout.fileno())
+            os.dup2(f.fileno(), sys.stderr.fileno())
+        _run()
     else:
         _run()
 
@@ -93,7 +105,19 @@ def predict_boltz(fasta_file: str, output: str, models: int, background: bool, g
         click.echo("Starting Boltz prediction and opening dashboard...")
         start_server(desktop=True)
     elif background:
+        import os
+        import sys
         click.echo("Running in background. Use 'bimos jobs' to check status.")
-        threading.Thread(target=_run, daemon=True).start()
+        if os.fork() > 0:
+            sys.exit(0)
+        os.setsid()
+        if os.fork() > 0:
+            sys.exit(0)
+        with open(os.devnull, 'r') as f:
+            os.dup2(f.fileno(), sys.stdin.fileno())
+        with open(os.devnull, 'a+') as f:
+            os.dup2(f.fileno(), sys.stdout.fileno())
+            os.dup2(f.fileno(), sys.stderr.fileno())
+        _run()
     else:
         _run()

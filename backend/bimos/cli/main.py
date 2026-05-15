@@ -85,8 +85,9 @@ def _print(msg: str) -> None:
 @click.option("--host", default="127.0.0.1", help="API server host (GUI mode).", hidden=True)
 @click.option("--port", default=8000, help="API server port (GUI mode).", hidden=True)
 @click.option("--headless", is_flag=True, help="Run GUI in headless mode (GUI mode).", hidden=True)
+@click.option("--remote", help="URL of a remote BIMOS server to connect to.", hidden=False)
 @click.pass_context
-def cli(ctx: click.Context, debug: bool, max: bool, gui: bool, manual: bool, host: str, port: int, headless: bool) -> None:
+def cli(ctx: click.Context, debug: bool, max: bool, gui: bool, manual: bool, host: str, port: int, headless: bool, remote: str) -> None:
     """
     Welcome to the **BIMOS** command-line interface.
 
@@ -125,9 +126,13 @@ def cli(ctx: click.Context, debug: bool, max: bool, gui: bool, manual: bool, hos
         if headless:
             click.echo(f"Starting BIMOS headless API on {host}:{port} ...")
         else:
-            click.echo(f"Starting BIMOS Desktop UI connected to {host}:{port} ...")
+            target = remote or settings.remote_url
+            if target:
+                click.echo(f"Connecting BIMOS Desktop UI to remote server: {target} ...")
+            else:
+                click.echo(f"Starting BIMOS Desktop UI connected to {host}:{port} ...")
 
-        start_server(host=host, port=port, desktop=not headless)
+        start_server(host=host, port=port, desktop=not headless, remote_url=remote or settings.remote_url)
         ctx.exit()
 
     # If no subcommand is provided and gui flag was not set, show help

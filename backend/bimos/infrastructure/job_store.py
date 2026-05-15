@@ -11,8 +11,11 @@ from pathlib import Path
 from typing import Any, Optional
 
 from pydantic import BaseModel
+from contextvars import ContextVar
 
 from bimos.config.settings import settings
+
+current_job_id: ContextVar[str] = ContextVar("current_job_id", default="")
 
 
 class JobStatus(StrEnum):
@@ -20,6 +23,7 @@ class JobStatus(StrEnum):
     RUNNING   = "running"
     COMPLETED = "completed"
     FAILED    = "failed"
+    CANCELED  = "canceled"
 
 
 class JobRecord(BaseModel):
@@ -32,6 +36,7 @@ class JobRecord(BaseModel):
     error: Optional[str] = None
     output_dir: Optional[str] = None
     meta: dict[str, Any] = {}
+    results: Optional[Any] = None
 
 
 class FileJobStore:
@@ -78,17 +83,19 @@ class FileJobStore:
         return self._load(job_id)
 
     def start(self, job_id: str) -> None:
+        current_job_id.set(job_id)
         job = self._load(job_id)
         if job:
             job.status = JobStatus.RUNNING
             job.started_at = datetime.now(timezone.utc).isoformat()
             self._save(job)
 
-    def complete(self, job_id: str, exit_code: int = 0) -> None:
+    def complete(self, job_id: str, exit_code: int = 0, results: Any = None) -> None:
         job = self._load(job_id)
         if job:
             job.status = JobStatus.COMPLETED if exit_code == 0 else JobStatus.FAILED
             job.finished_at = datetime.now(timezone.utc).isoformat()
+            job.results = results
             if exit_code != 0:
                 job.error = f"Process exited with code {exit_code}"
             self._save(job)
@@ -107,11 +114,14 @@ class FileJobStore:
             with open(self._log_path(job_id), "a", encoding="utf-8") as f:
                 f.write(line + "\n")
 
-    def get_logs(self, job_id: str) -> list[str]:
+    def get_logs(self, job_id: str, tail: Optional[int] = None) -> list[str]:
         p = self._log_path(job_id)
         if not p.exists():
             return []
-        return p.read_text(encoding="utf-8", errors="replace").splitlines()
+        lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+        if tail:
+            return lines[-tail:]
+        return lines
 
     def list_all(self) -> list[JobRecord]:
         jobs = []
@@ -125,6 +135,34 @@ class FileJobStore:
         jobs.sort(key=lambda x: x.created_at, reverse=True)
         return jobs
 
+    def cancel(self, job_id: str) -> bool:
+        job = self._load(job_id)
+        if not job:
+            return False
+            
+        job.status = JobStatus.CANCELED
+        job.finished_at = datetime.now(timezone.utc).isoformat()
+        job.error = "Canceled by user"
+        self._save(job)
+        
+        # Clean up any running containers for this job
+        try:
+            import subprocess
+            from bimos.infrastructure.container import _detect_runtime, _get_proc_env
+            runtime = _detect_runtime()
+            proc_env = _get_proc_env()
+            res = subprocess.run(
+                [runtime, "ps", "-q", "--filter", f"label=bimos_job_id={job_id}"],
+                capture_output=True, text=True, env=proc_env
+            )
+            cids = res.stdout.strip().split()
+            if cids:
+                subprocess.run([runtime, "rm", "-f"] + cids, env=proc_env)
+        except Exception:
+            pass
+            
+        return True
+
     def delete(self, job_id: str) -> bool:
         p = self._path(job_id)
         log_p = self._log_path(job_id)
@@ -135,6 +173,23 @@ class FileJobStore:
                 deleted = True
             if log_p.exists():
                 log_p.unlink()
+                
+        # Clean up any running containers for this job
+        try:
+            import subprocess
+            from bimos.infrastructure.container import _detect_runtime, _get_proc_env
+            runtime = _detect_runtime()
+            proc_env = _get_proc_env()
+            res = subprocess.run(
+                [runtime, "ps", "-q", "--filter", f"label=bimos_job_id={job_id}"],
+                capture_output=True, text=True, env=proc_env
+            )
+            cids = res.stdout.strip().split()
+            if cids:
+                subprocess.run([runtime, "rm", "-f"] + cids, env=proc_env)
+        except Exception:
+            pass
+
         return deleted
 
 # Singleton instance

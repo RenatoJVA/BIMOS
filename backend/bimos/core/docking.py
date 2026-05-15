@@ -153,7 +153,6 @@ def _prepare_receptor(pdb_path: Path, on_output: Optional[Callable[[str], None]]
     rc = _container_run(
         ["mk_prepare_receptor.py", "--read_pdb", pdb_path.name, "-p", pdbqt_path.name],
         work_dir=pdb_path.parent,
-        on_output=on_output,
     )
     if rc != 0 or not pdbqt_path.exists():
         raise RuntimeError(f"Receptor preparation failed for {pdb_path.name} (exit {rc})")
@@ -170,6 +169,7 @@ sdf_out = "{sdf_out}"
 
 def largest_fragment(mol):
     frags = Chem.GetMolFrags(mol, asMols=True, sanitizeFrags=True)
+    if not frags: return mol
     return max(frags, key=lambda m: m.GetNumHeavyAtoms())
 
 suppl  = Chem.SDMolSupplier(sdf_in, removeHs=False)
@@ -178,11 +178,33 @@ ok = 0
 for mol in suppl:
     if mol is None:
         continue
+    
+    # If the molecule has no atoms (dummy SDF from exporter), try to get it from SMILES property
+    if mol.GetNumAtoms() == 0 and mol.HasProp("SMILES"):
+        smiles = mol.GetProp("SMILES")
+        mol_new = Chem.MolFromSmiles(smiles)
+        if mol_new:
+            # Transfer name if possible
+            if mol.HasProp("_Name"):
+                mol_new.SetProp("_Name", mol.GetProp("_Name"))
+            mol = mol_new
+
+    if mol.GetNumAtoms() == 0:
+        continue
+
     mol = largest_fragment(mol)
     mol_h = Chem.AddHs(mol)
+    # Generate 3D coordinates
     if AllChem.EmbedMolecule(mol_h, AllChem.ETKDGv3()) == -1:
-        continue
-    AllChem.MMFFOptimizeMolecule(mol_h)
+        # Fallback for very small or tricky molecules
+        if AllChem.EmbedMolecule(mol_h, useRandomCoords=True) == -1:
+            continue
+    
+    try:
+        AllChem.MMFFOptimizeMolecule(mol_h)
+    except:
+        pass
+        
     writer.write(mol_h)
     ok += 1
 writer.close()
@@ -204,7 +226,7 @@ def _prepare_ligand(sdf_path: Path, on_output: Optional[Callable[[str], None]] =
     )
 
     try:
-        rc = _container_run(["python3", script_path.name], work_dir=sdf_path.parent, on_output=on_output)
+        rc = _container_run(["python3", script_path.name], work_dir=sdf_path.parent)
         if rc != 0:
             logger.warning("RDKit H-addition failed for %s", sdf_path.name)
             return None
@@ -213,7 +235,6 @@ def _prepare_ligand(sdf_path: Path, on_output: Optional[Callable[[str], None]] =
             ["mk_prepare_ligand.py", "-i", sdf_h.name, "-o", pdbqt_path.name,
              "--charge_model", "gasteiger", "--rename_atoms"],
             work_dir=sdf_path.parent,
-            on_output=on_output,
         )
         if rc != 0 or not pdbqt_path.exists():
             logger.warning("Meeko preparation failed for %s", sdf_path.name)
@@ -343,7 +364,6 @@ def run_docking_pipeline(
                     "--exhaustiveness", str(exhaustiveness),
                 ],
                 work_dir=complex_dir,
-                on_output=on_output,
             )
             out_path = complex_dir / out_name
             score = _extract_best_score(out_path) if rc == 0 else None
@@ -376,7 +396,7 @@ def run_docking_pipeline(
         })
 
         if on_output:
-            on_output(f"[BIMOS] [{complex_name}] Best score: {best_score:.3f} kcal/mol")
+            on_output(f"{lig_pdbqt.stem}: {best_score:.3f} kcal/mol")
 
     if on_output:
         on_output(f"[BIMOS] Docking complete. {len(final_results)} complex(es) done.")

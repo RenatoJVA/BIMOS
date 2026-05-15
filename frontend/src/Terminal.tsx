@@ -13,7 +13,7 @@ export function Terminal({ jobId, onClose, apiBase }: TerminalProps) {
 
   const fetchLogs = async () => {
     try {
-      const res = await fetch(`${apiBase}/jobs/${jobId}/logs`);
+      const res = await fetch(`${apiBase}/jobs/${jobId}/logs?tail=500`);
       if (!res.ok) throw new Error('Failed to fetch logs');
       const data = await res.json();
       setLogs(data.logs || []);
