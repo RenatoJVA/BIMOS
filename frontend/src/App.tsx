@@ -15,6 +15,7 @@ interface Job {
   error?: string;
   output_dir?: string;
   meta: Record<string, any>;
+  results?: any;
 }
 
 function App() {
@@ -161,7 +162,26 @@ function App() {
                     {formatMeta(job.meta)}
                   </div>
 
-                  {(job.output_dir || job.error) && (
+                  {job.results && job.kind === 'dock' && Array.isArray(job.results) && (
+                    <div className="border-t border-border pt-4 mt-2 bg-bg-page/50 -mx-6 px-6 -mb-6 pb-6 rounded-b-lg">
+                      <div className="text-[0.7rem] uppercase tracking-widest text-accent mb-3 font-bold">Top Docking Hits</div>
+                      <div className="flex flex-col gap-2">
+                        {job.results.slice(0, 3).map((res: any, i: number) => (
+                          <div key={i} className="flex justify-between items-center bg-bg-card border border-border p-2 rounded text-[0.8rem] font-mono shadow-sm">
+                            <span className="truncate flex-1 pr-2 opacity-90">{res.complex.split('-').pop()}</span>
+                            <span className="text-success font-bold">{res.best_score_kcal_mol.toFixed(2)} kcal/mol</span>
+                          </div>
+                        ))}
+                        {job.results.length > 3 && (
+                          <div className="text-[0.65rem] text-center text-text-secondary opacity-60 mt-1">
+                            + {job.results.length - 3} more results in output directory
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {(job.output_dir || job.error) && !job.results && (
                     <div className="border-t border-border pt-4 mt-2 text-[0.75rem] opacity-80 font-mono flex flex-col gap-1">
                       {job.error ? (
                         <span className="text-danger">ERROR: {job.error}</span>

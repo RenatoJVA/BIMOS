@@ -6,6 +6,8 @@ import threading
 import subprocess
 import uvicorn
 from pathlib import Path
+import socket
+from urllib.parse import urlparse
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -122,20 +124,46 @@ def _run_server(host: str, port: int):
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 
-def start_server(host: str = "127.0.0.1", port: int = 8000, desktop: bool = True) -> None:
+def _is_reachable(url: str, timeout: int = 3) -> bool:
+    """Check if a URL is reachable via socket connection."""
+    try:
+        parsed = urlparse(url)
+        host = parsed.hostname
+        if not host:
+            return False
+        port = parsed.port or (80 if parsed.scheme == "http" else 443)
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except Exception:
+        return False
+
+
+def start_server(host: str = "127.0.0.1", port: int = 8000, desktop: bool = True, remote_url: str = "") -> None:
     """
     Start the FastAPI server. If desktop is True, run it in a background thread
     and start a native pywebview window for a seamless desktop app experience.
-    """
-    if not desktop:
-        _run_server(host, port)
-        return
 
-    # Start FastAPI in a daemon thread
-    t = threading.Thread(target=_run_server, args=(host, port), daemon=True)
-    t.start()
-    # Give uvicorn a moment to bind before Qt opens the URL
-    time.sleep(0.8)
+    If remote_url is provided, the local server is NOT started, and the UI
+    connects directly to the remote instance.
+    """
+    if remote_url:
+        if not _is_reachable(remote_url):
+            print(f"\n\033[1;31mError:\033[0m Remote server {remote_url} is unreachable.")
+            print("Please ensure the BIMOS API is running on the remote host or unset BIMOS_REMOTE_URL in your .env file.")
+            import sys
+            sys.exit(1)
+        target_url = remote_url
+    else:
+        if not desktop:
+            _run_server(host, port)
+            return
+
+        # Start FastAPI in a daemon thread
+        t = threading.Thread(target=_run_server, args=(host, port), daemon=True)
+        t.start()
+        # Give uvicorn a moment to bind before Qt opens the URL
+        time.sleep(0.8)
+        target_url = f"http://{host}:{port}"
 
     # Detect OS color scheme BEFORE creating the window so background matches
     is_dark = _detect_system_dark_mode()
@@ -164,7 +192,9 @@ def start_server(host: str = "127.0.0.1", port: int = 8000, desktop: bool = True
     # Pass the detected system theme as a URL query parameter.
     # QtWebEngine does NOT relay prefers-color-scheme from the OS automatically,
     # so the frontend reads this param to apply the correct theme in Auto mode.
-    url = f"http://{host}:{port}/?systemTheme={system_theme}"
+    # We ensure the URL ends with /? or just & if it already has params.
+    sep = "&" if "?" in target_url else "?"
+    url = f"{target_url}{sep}systemTheme={system_theme}"
 
     webview.create_window(
         "BIMOS Dashboard",

@@ -12,31 +12,68 @@ BIMOS_ENV_FILE = BIMOS_BASE / ".env"
 if not BIMOS_ENV_FILE.exists():
     BIMOS_BASE.mkdir(parents=True, exist_ok=True)
     
-    default_env = f"""# BIMOS Environment Configuration
-# Please edit these paths and settings to match your setup.
+    default_env = f"""# ==============================================================================
+#                     BIMOS ENVIRONMENT CONFIGURATION
+# ==============================================================================
+# This file controls the global settings for the Biomolecular Modeling Suite.
+# Changes here will be applied the next time you run `bimos` or the GUI.
 
-# Server
+# ------------------------------------------------------------------------------
+# 1. CORE SERVER SETTINGS
+# ------------------------------------------------------------------------------
+# The address and port where the local API server will run.
 BIMOS_HOST=127.0.0.1
 BIMOS_PORT=8000
 BIMOS_DEBUG=false
 
-# Container Image
+# ------------------------------------------------------------------------------
+# 2. COMPUTATIONAL ENGINE (PODMAN / DOCKER)
+# ------------------------------------------------------------------------------
+# The container image containing GROMACS, AutoDock Vina, RDKit, Meeko, etc.
+# By default it uses the local image. You can specify a Docker Hub image if needed.
 BIMOS_IMAGE=localhost/bimos/global:latest
+
+# Enable/Disable GPU acceleration (CUDA/OpenCL) for MD and ESMFold.
 BIMOS_USE_GPU=true
 
-# Database
-BIMOS_DATABASE_URL=postgresql://bimos:bimos@localhost/bimos
-
-# Data Paths
+# ------------------------------------------------------------------------------
+# 3. DIRECTORY PATHS
+# ------------------------------------------------------------------------------
+# BIMOS_WORKSPACE: Where all docking, MD, and prediction jobs are executed.
+# BIMOS_CACHE: Where temporary files and downloaded models are stored.
 BIMOS_WORKSPACE={(BIMOS_BASE / "workspace").as_posix()}
 BIMOS_CACHE={(BIMOS_BASE / "cache").as_posix()}
 BIMOS_LOGS={(BIMOS_BASE / "logs").as_posix()}
 BIMOS_ESM_CACHE={(BIMOS_BASE / "cache" / "esm").as_posix()}
 
-# QM Tools (Host Binaries)
-# Provide the absolute path to the executable if installed.
+# ------------------------------------------------------------------------------
+# 4. DATABASE INTEGRATION
+# ------------------------------------------------------------------------------
+# Connection string for the PostgreSQL database (if used for tracking workflows).
+# Local SQLite curated datasets (ChEMBL) are managed automatically.
+BIMOS_DATABASE_URL=postgresql://bimos:bimos@localhost/bimos
+
+# ------------------------------------------------------------------------------
+# 5. QUANTUM MECHANICS (HOST BINARIES)
+# ------------------------------------------------------------------------------
+# BIMOS runs QM software directly on the host (not inside the container).
+# Provide the absolute path to your local ORCA or Gaussian 16 executables.
+# Example: ORCA_PATH=/opt/orca/orca
 ORCA_PATH=
 GAUSSIAN_PATH=
+
+# ------------------------------------------------------------------------------
+# 6. DISTRIBUTED EXECUTION (THIN CLIENT)
+# ------------------------------------------------------------------------------
+# BIMOS_REMOTE_URL: If set, the Desktop UI will connect to this remote API 
+#                   instead of starting a local server (e.g. http://10.0.0.5:8000).
+# BIMOS_SSH_HOST: If set, the local BIMOS engine will dispatch container tasks
+#                 via SSH to the target machine (e.g. 10.0.0.5).
+# BIMOS_REMOTE_URL=
+# BIMOS_SSH_HOST=
+# BIMOS_SSH_USER=
+# BIMOS_SSH_KEY=
+# ==============================================================================
 """
     BIMOS_ENV_FILE.write_text(default_env)
     print("============================================================", file=sys.stderr)
@@ -74,6 +111,12 @@ class Settings:
     bimos_image: str = os.getenv("BIMOS_IMAGE", "localhost/bimos/global:latest")
     use_gpu: bool = os.getenv("BIMOS_USE_GPU", "true").lower() == "true"
     max_threads: bool = False
+
+    # Remote Connection
+    remote_url: str = os.getenv("BIMOS_REMOTE_URL", "")  # e.g., http://192.168.1.100:8000
+    ssh_host: str = os.getenv("BIMOS_SSH_HOST", "")
+    ssh_user: str = os.getenv("BIMOS_SSH_USER", "")
+    ssh_key: str = os.getenv("BIMOS_SSH_KEY", "")
 
     def get_threads(self) -> int:
         """Calculate number of threads based on max_threads flag."""

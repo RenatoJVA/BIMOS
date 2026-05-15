@@ -31,6 +31,7 @@ class JobResponse(BaseModel):
     error: Optional[str] = None
     output_dir: Optional[str] = None
     meta: dict[str, Any] = {}
+    results: Optional[Any] = None
 
 
 class PredictRequest(BaseModel):
@@ -74,6 +75,7 @@ def _job_to_response(j: JobRecord) -> JobResponse:
         error=j.error,
         output_dir=j.output_dir,
         meta=j.meta,
+        results=j.results,
     )
 
 
@@ -87,10 +89,12 @@ def _get_job_or_404(job_id: str) -> JobRecord:
 def _dispatch(fn, job_id: str, **kwargs) -> None:
     """Run fn in a background daemon thread; update job store on completion."""
     def _worker():
+        from bimos.infrastructure.job_store import current_job_id
+        current_job_id.set(job_id)
         store.start(job_id)
         try:
-            fn(on_output=lambda line: store.log(job_id, line), **kwargs)
-            store.complete(job_id, exit_code=0)
+            result = fn(on_output=lambda line: store.log(job_id, line), **kwargs)
+            store.complete(job_id, exit_code=0, results=result)
         except Exception as exc:
             store.fail(job_id, str(exc))
 
@@ -362,15 +366,23 @@ async def get_job(job_id: str):
 
 
 @router.get("/jobs/{job_id}/logs")
-async def get_job_logs(job_id: str):
-    """Return all captured log lines for a job."""
+async def get_job_logs(job_id: str, tail: Optional[int] = Query(None)):
+    """Return captured log lines for a job, optionally limited to the last N lines."""
     _get_job_or_404(job_id)
-    return {"job_id": job_id, "logs": store.get_logs(job_id)}
+    return {"job_id": job_id, "logs": store.get_logs(job_id, tail=tail)}
+
+
+@router.post("/jobs/{job_id}/cancel", status_code=200)
+async def cancel_job(job_id: str):
+    """Cancel a running job and kill its containers."""
+    if not store.cancel(job_id):
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
+    return {"status": "canceled", "job_id": job_id}
 
 
 @router.delete("/jobs/{job_id}", status_code=204)
 async def delete_job(job_id: str):
-    """Remove a job from the store."""
+    """Cancel a job (if running) and remove it from the store."""
     if not store.delete(job_id):
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
 

@@ -1,49 +1,50 @@
 manual:
   title: "# BIMOS CLI Manual"
-  description: "BIMOS (Biomolecular Modeling Suite) is a high-performance toolkit for structural biology and quantum chemistry."
+  description: "BIMOS (Biomolecular Modeling Suite) is a high-performance toolkit for structural biology, virtual screening, and quantum chemistry."
   footer: "For more information, visit the official documentation or use `bimos --help`."
   sections:
-    - title: "## 1. Core Concepts"
+    - title: "## 1. Core Execution Rules"
       content: |
+        > **IMPORTANT**: Always run BIMOS globally using the `bimos` command. 
+        > Do not execute scripts from inside the `./backend` directory. Navigate to your working directory first.
+        
         * **Jobs**: Every calculation (docking, prediction, etc.) is tracked as a job. Use `bimos jobs` to see them.
-        * **Background Execution**: Most commands block the terminal by default. To run them in the background, use standard Unix `&` or the built-in `-b` flag if available in the command.
-        * **CPU Optimization**: Use the `--max` flag to force the use of all available CPU cores/threads across all subcommands. This is ideal for HPC environments.
-        * **Desktop UI**: You can start the full GUI at any time using `bimos -g`.
+        * **Desktop UI**: You can start the full GUI at any time using `bimos -g` or append `-g` to any workflow command to monitor it live.
+        * **CPU Optimization**: Use the `--max` flag to force the use of all available CPU cores/threads.
 
-    - title: "## 2. Protein Structure Prediction"
+    - title: "## 2. Virtual Screening & Databases"
+      content: |
+        BIMOS provides built-in curated datasets (`candidates_1000`, `phytocompounds_300`) for virtual screening.
+        
+        * **Search Candidates**: `bimos db query "acid" --dataset phytocompounds_300`
+        * **Export Dataset**: `bimos db export candidates_1000 ./my_ligands.sdf`
+        * **Direct Screening**: `bimos dock target.pdb candidates_1000 --dataset -g`
+
+    - title: "## 3. Protein Structure Prediction"
       content: |
         Predict 3D structures from FASTA sequences using AI-driven folding models.
         * **ESMFold**: `bimos predict sequence.fasta -o output_dir/`
         * **Boltz-1**: `bimos predict-boltz sequence.fasta -n 5`
 
-    - title: "## 3. Molecular Docking & Simulation"
+    - title: "## 4. Molecular Docking & Simulation"
       content: |
-        ### 3.1. Docking (Vina/Autodock)
-        Perform molecular docking of one or more ligands against a protein.
+        ### 4.1. Docking (Vina)
+        Perform molecular docking using your own SDF files or built-in datasets.
         * **Example**: `bimos dock protein.pdb ligands.sdf -o results/`
-        * **Multiple Ligands**: The SDF file can contain multiple molecules; BIMOS will dock each one.
 
-        ### 3.2. MD Simulation Workflows (GROMACS)
-        BIMOS automates the entire GROMACS pipeline (Preparation, Solvation, Ionization, Minimization, NVT, NPT, Production, and Analysis).
+        ### 4.2. MD Simulation Workflows (GROMACS)
+        Automates the entire GROMACS pipeline.
+        * **APO Simulation**: `bimos workflow -p protein.pdb`
+        * **HOLO Simulation**: `bimos workflow -p protein.pdb --ligand-gro lig.gro --ligand-itp lig.itp`
 
-        * **APO Simulation** (Protein only):
-          `bimos workflow -p protein.pdb`
-        * **HOLO Simulation** (Protein + Ligand):
-          `bimos workflow -p protein.pdb --ligand-gro lig.gro --ligand-itp lig.itp`
-          *Note: Ensure the ligand topology (.itp) and coordinates (.gro) are compatible with the forcefield.*
-
-    - title: "## 4. Quantum Mechanics (QM)"
+    - title: "## 5. Quantum Mechanics (QM)"
       content: |
-        Run charge computations, structure optimizations, or energy calculations using Gaussian 16 or ORCA.
-        * **Gaussian 16 Pipeline**: `bimos qm-g16 ./ligands_dir -j 4`
-        * **ORCA Pipeline**: `bimos qm-orca ./ligands_dir -j 4`
-        * **Note**: These commands require the respective binaries to be installed and accessible in your PATH.
+        Run automated charge computations and structure optimizations using host binaries.
+        * **ORCA Pipeline**: `bimos qm-orca ./ligands_dir -j 4 --charge 0`
+        * **Gaussian 16**: `bimos qm-g16 ./ligands_dir -j 4 --charge 1`
 
-    - title: "## 5. Troubleshooting & Logs"
+    - title: "## 6. Troubleshooting"
       content: |
-        * **View Logs**: To view detailed logs for a specific background job:
-          `bimos jobs -l <JOB_ID>`
-        * **Debug Mode**: Enable verbose output for any command:
-          `bimos --debug <COMMAND>`
-        * **Database Reset**: If you encounter state issues, you can reset the job database:
-          `bimos db reset`
+        * **White Screen GUI**: Check `~/.bimos/.env`. If `BIMOS_REMOTE_URL` is set to an unreachable IP, the UI will stall. Comment it out for local mode.
+        * **View Logs**: `bimos jobs -l <JOB_ID>`
+        * **Debug Mode**: Enable verbose output with `bimos --debug <COMMAND>`

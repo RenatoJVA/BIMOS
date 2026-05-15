@@ -7,6 +7,7 @@ Works with rootless Podman (no daemon socket required).
 
 import subprocess
 import logging
+import os
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -17,6 +18,19 @@ logger = logging.getLogger("bimos.container")
 
 def _detect_runtime() -> str:
     return settings.container_runtime()
+
+
+def _get_proc_env() -> dict[str, str]:
+    """Get process environment with SSH remote host if configured."""
+    proc_env = os.environ.copy()
+    if settings.ssh_host:
+        user = f"{settings.ssh_user}@" if settings.ssh_user else ""
+        uri = f"ssh://{user}{settings.ssh_host}"
+        proc_env["DOCKER_HOST"] = uri
+        proc_env["CONTAINER_HOST"] = uri
+        # Ensure SSH doesn't hang on prompts
+        proc_env["SSH_AUTH_SOCK"] = os.environ.get("SSH_AUTH_SOCK", "")
+    return proc_env
 
 
 def run(
@@ -75,6 +89,11 @@ def run(
             for k, v in env.items():
                 full_cmd += ["-e", f"{k}={v}"]
 
+        from bimos.infrastructure.job_store import current_job_id
+        job_id = current_job_id.get()
+        if job_id:
+            full_cmd += ["--label", f"bimos_job_id={job_id}"]
+
         full_cmd.append(image)
         full_cmd.extend(command)
     else:
@@ -85,6 +104,9 @@ def run(
     if on_output:
         on_output(f"[CMD] {' '.join(str(c) for c in full_cmd)}")
 
+    # Setup environment for remote execution if configured
+    proc_env = _get_proc_env()
+
     try:
         process = subprocess.Popen(
             full_cmd,
@@ -94,6 +116,7 @@ def run(
             text=True,
             encoding="utf-8",
             errors="replace",
+            env=proc_env,
         )
 
         if stdin_text is not None and process.stdin:
@@ -108,8 +131,14 @@ def run(
                     if on_output:
                         on_output(stripped)
 
-        process.wait(timeout=timeout)
-        return process.returncode
+        rc = process.wait(timeout=timeout)
+        from bimos.infrastructure.job_store import current_job_id, store, JobStatus
+        job_id = current_job_id.get()
+        if job_id:
+            job = store.get(job_id)
+            if not job or job.status == JobStatus.CANCELED:
+                raise RuntimeError(f"Job {job_id} was canceled by user.")
+        return rc
 
     except subprocess.TimeoutExpired:
         process.kill()
@@ -129,11 +158,13 @@ def run(
 
 
 def image_exists(image: str) -> bool:
-    """Check if a container image is available locally."""
+    """Check if a container image is available locally (or on remote host)."""
     runtime = _detect_runtime()
+    proc_env = _get_proc_env()
     result = subprocess.run(
         [runtime, "image", "inspect", image],
         capture_output=True,
+        env=proc_env,
     )
     return result.returncode == 0
 
