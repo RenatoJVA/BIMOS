@@ -5,6 +5,7 @@ Compiles the application into a standalone CLI/Desktop executable.
 
 import subprocess
 import sys
+import platform
 from pathlib import Path
 
 
@@ -27,7 +28,7 @@ def main():
         print("Cleaning previous build artifacts...")
         shutil.rmtree(dist_dir)
 
-    cores = max(1, int((os.cpu_count() or 1) * 0.8))
+    cores = max(1, int((os.cpu_count() or 1) * 0.5))
 
     cmd = [
         sys.executable,
@@ -35,7 +36,6 @@ def main():
         "nuitka",
         f"--jobs={cores}",
         "--standalone",
-        "--onefile",
         # Embed the React static files
         "--include-data-dir=bimos/ui=bimos/ui",
         "--include-data-dir=bimos/scripts=bimos/scripts",
@@ -47,10 +47,15 @@ def main():
         # Ensure packages are traced
         "--include-package=bimos",
         "--include-package=qtpy",
-        "--include-package=webview",
+        # Do NOT add --include-package=webview here.
+        # Nuitka's built-in pywebview plugin traces and manages webview
+        # submodule inclusion/exclusion per platform automatically.
+        # Forcing it overrides plugin decisions (e.g. excluding android on
+        # Windows) and causes a FATAL "Conflict between user and plugin" error.
         "--include-package=rich",
         "--include-package=rich_click",
         "--enable-plugin=pyqt6",
+        # (Platform-specific exclusions appended below when needed)
         # Output configuration
         "--output-dir=dist",
         "--output-filename=bimos",
@@ -58,6 +63,16 @@ def main():
         "--static-libpython=no",
         "main.py",
     ]
+
+    # On Windows:
+    #  1. Attach to the console so CLI commands (e.g. bimos --help) print correctly.
+    #     This also prevents double-clicking the .exe from flashing a black terminal.
+    #  2. Do NOT manually exclude any webview.platforms.* sub-modules.
+    #     Nuitka's built-in pywebview plugin already decides what to include/exclude.
+    #     Adding --nofollow-import-to=webview.platforms.* here causes a FATAL
+    #     "Conflict between user and plugin decision" error.
+    if platform.system().lower() == "windows":
+        cmd.insert(len(cmd) - 5, "--windows-console-mode=attach")
 
     print(f"Running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)

@@ -32,9 +32,9 @@ from pathlib import Path
 # ── ANSI helpers ────────────────────────────────────────────────────────────
 
 def info(msg):   print(f"\n\033[1;34m==>\033[0m \033[1m{msg}\033[0m")
-def ok(msg):     print(f"\033[1;32m  ✔\033[0m  {msg}")
-def warn(msg):   print(f"\033[1;33m  ⚠\033[0m  {msg}")
-def error(msg):  print(f"\033[1;31m  ✘\033[0m  {msg}")
+def ok(msg):     print(f"\033[1;32m  [OK]\033[0m  {msg}")
+def warn(msg):   print(f"\033[1;33m  [WARN]\033[0m  {msg}")
+def error(msg):  print(f"\033[1;31m  [ERROR]\033[0m  {msg}")
 
 
 def run(cmd: list[str], cwd: Path | None = None, env: dict | None = None):
@@ -175,15 +175,96 @@ def package_windows_nsis(root: Path, version: str):
 
     out_dir = root / "installer" / "dist"
     out_dir.mkdir(parents=True, exist_ok=True)
+    assets_dir = root / "installer" / "assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create LICENSE.rtf if missing
+    license_file = assets_dir / "LICENSE.rtf"
+    if not license_file.exists():
+        license_file.write_text(
+            r"{\rtf1\ansi\ansicpg1252\deff0\deflang1033"
+            r"{\fonttbl{\f0\fnil\fcharset0 Courier New;}}"
+            r"{\*\generator Riched20 6.00.3790;}\viewkind4\uc1\pard\f0\fs20"
+            r"BIMOS — Biomolecular Modeling Suite\par"
+            r"\par"
+            r"This software is provided as-is. See project LICENSE for terms.\par"
+            r"}"
+        )
+        ok(f"Created default LICENSE.rtf")
+
+    # Create README.md if missing
+    readme_file = root / "README.md"
+    if not readme_file.exists():
+        readme_file.write_text("# BIMOS\n\nBiomolecular Modeling Suite\n")
+        ok("Created default README.md")
+
+    # Verify binary dir exists (from standalone mode)
+    binary_dir = root / "backend" / "dist" / "main.dist"
+    if not binary_dir.exists():
+        error(f"Binary directory not found: {binary_dir}")
+        sys.exit(1)
+
+    # Verify dockers dir exists
+    dockers_dir = root / "backend" / "dockers"
+    if not dockers_dir.exists():
+        warn(f"Dockers directory not found: {dockers_dir}")
+        dockers_dir.mkdir(parents=True, exist_ok=True)
 
     nsi_script = root / "installer" / "bimos.nsi"
 
-    # Patch OutFile path to point to installer/dist/
+    # Patch NSI with absolute paths
     nsi_text = nsi_script.read_text()
     nsi_patched = nsi_text.replace(
         'OutFile           "dist\\BIMOS-',
         f'OutFile           "{out_dir}\\BIMOS-',
     )
+    
+    # Replace file/directory paths with absolute paths
+    binary_path = str(binary_dir).replace("\\", "\\\\")
+    readme_path = str(readme_file).replace("\\", "\\\\")
+    dockers_path = str(dockers_dir).replace("\\", "\\\\")
+    license_path = str(license_file).replace("\\", "\\\\")
+    
+    nsi_patched = nsi_patched.replace("LICENSE_FILE_PATH", license_path)
+    nsi_patched = nsi_patched.replace("BINARY_DIR_PATH", binary_path)
+    nsi_patched = nsi_patched.replace("README_FILE_PATH", readme_path)
+    nsi_patched = nsi_patched.replace("DOCKERS_DIR_PATH", dockers_path)
+
+    # Inject MUI asset definitions if files exist
+    mui_defs = []
+
+    if (assets_dir / "bimos.ico").exists():
+        icon_path = str(assets_dir / "bimos.ico").replace("\\", "\\\\")
+        mui_defs.append(f'!define MUI_ICON                  "{icon_path}"')
+        mui_defs.append(f'!define MUI_UNICON                "{icon_path}"')
+    else:
+        warn("bimos.ico not found — installer will use default icon")
+
+    if (assets_dir / "wizard_banner.bmp").exists():
+        banner_path = str(assets_dir / "wizard_banner.bmp").replace("\\", "\\\\")
+        mui_defs.append(f'!define MUI_WELCOMEFINISHPAGE_BITMAP   "{banner_path}"')
+        mui_defs.append(f'!define MUI_UNWELCOMEFINISHPAGE_BITMAP "{banner_path}"')
+    else:
+        warn("wizard_banner.bmp not found — welcome page will have no banner")
+
+    if (assets_dir / "header.bmp").exists():
+        header_path = str(assets_dir / "header.bmp").replace("\\", "\\\\")
+        mui_defs.append('!define MUI_HEADERIMAGE')
+        mui_defs.append(f'!define MUI_HEADERIMAGE_BITMAP    "{header_path}"')
+        mui_defs.append('!define MUI_HEADERIMAGE_RIGHT')
+    else:
+        warn("header.bmp not found — installer header will use default")
+
+    # Insert MUI definitions after the placeholder comment
+    if mui_defs:
+        mui_block = "\n".join(mui_defs)
+        nsi_patched = nsi_patched.replace(
+            "; OPTIONAL: MUI_ICON, MUI_UNICON (set by builder.py if assets exist)\n"
+            "; OPTIONAL: MUI_WELCOMEFINISHPAGE_BITMAP, MUI_UNWELCOMEFINISHPAGE_BITMAP\n"
+            "; OPTIONAL: MUI_HEADERIMAGE, MUI_HEADERIMAGE_BITMAP, MUI_HEADERIMAGE_RIGHT",
+            mui_block,
+        )
+
     patched_nsi = root / "installer" / "_bimos_patched.nsi"
     patched_nsi.write_text(nsi_patched)
 
@@ -261,9 +342,10 @@ def main():
     else:
         warn("Skipping Nuitka compilation")
 
-    binary = root / "backend" / "dist" / "bimos"
-    if not binary.exists() and not args.skip_nuitka:
-        error(f"Binary not found after build: {binary}")
+    # With standalone (no onefile), Nuitka creates main.dist
+    binary_dir = root / "backend" / "dist" / "main.dist"
+    if not binary_dir.exists() and not args.skip_nuitka:
+        error(f"Binary folder not found after build: {binary_dir}")
         sys.exit(1)
 
     # ── Step 3: Installer ───────────────────────────────────
@@ -279,9 +361,9 @@ def main():
 
     # ── Done ────────────────────────────────────────────────
     print(f"\n\033[1;32m{'─'*55}\033[0m")
-    print(f"\033[1;32m  ✅  Build complete!\033[0m")
+    print(f"\033[1;32m  [OK]  Build complete!\033[0m")
     print(f"\033[1;32m{'─'*55}\033[0m")
-    binary_path = root / "backend" / "dist" / "bimos"
+    binary_path = binary_dir if 'binary_dir' in locals() else root / "backend" / "dist" / "main.dist"
     print(f"  Binary    : {binary_path}")
     print(f"  Installer : {root / 'installer' / 'dist'}/")
     print()
