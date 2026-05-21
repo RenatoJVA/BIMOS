@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=BIMOS
+GenericName=Biomolecular Modeling Suite
+Comment=Virtual screening, docking, MD and QM in one app
+Exec=bimos BIMOS_GUI
+Icon=bimos
+Terminal=false
+Categories=Science;Education;
+Keywords=docking;molecular;dynamics;chemistry;bioinformatics;
+StartupNotify=true
+StartupWMClass=bimos
