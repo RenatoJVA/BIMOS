@@ -5,7 +5,9 @@
 ; ============================================================
 
 !define APP_NAME        "BIMOS"
+!ifndef APP_VERSION
 !define APP_VERSION     "0.1.0"
+!endif
 !define APP_PUBLISHER   "BIMOS Project"
 !define APP_URL         "https://github.com/your-org/bimos"
 !define APP_EXE         "bimos.exe"
@@ -15,6 +17,7 @@
 ; ── MUI2 Modern UI ───────────────────────────────────────────
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
+!include "WordFunc.nsh"
 
 ; ── Installer metadata ───────────────────────────────────────
 Name              "${APP_NAME} ${APP_VERSION}"
@@ -27,17 +30,14 @@ SetCompressorDictSize 32
 
 ; ── MUI Settings ─────────────────────────────────────────────
 !define MUI_ABORTWARNING
-!define MUI_ICON                  "installer\assets\bimos.ico"
-!define MUI_UNICON                "installer\assets\bimos.ico"
-!define MUI_WELCOMEFINISHPAGE_BITMAP   "installer\assets\wizard_banner.bmp"
-!define MUI_UNWELCOMEFINISHPAGE_BITMAP "installer\assets\wizard_banner.bmp"
-!define MUI_HEADERIMAGE
-!define MUI_HEADERIMAGE_BITMAP    "installer\assets\header.bmp"
-!define MUI_HEADERIMAGE_RIGHT
+; OPTIONAL: MUI_ICON, MUI_UNICON (set by builder.py if assets exist)
+; OPTIONAL: MUI_WELCOMEFINISHPAGE_BITMAP, MUI_UNWELCOMEFINISHPAGE_BITMAP
+; OPTIONAL: MUI_HEADERIMAGE, MUI_HEADERIMAGE_BITMAP, MUI_HEADERIMAGE_RIGHT
 
 ; ── Pages ────────────────────────────────────────────────────
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_LICENSE      "installer\assets\LICENSE.rtf"
+; LICENSE_FILE_PATH will be replaced by builder.py
+!insertmacro MUI_PAGE_LICENSE      "LICENSE_FILE_PATH"
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
@@ -61,18 +61,19 @@ Section "BIMOS Core (required)" SecCore
     SectionIn RO                    ; cannot be deselected
 
     SetOutPath "$INSTDIR"
-    File "backend\dist\bimos.exe"
-    File "backend\README.md"
+    ; BINARY_DIR_PATH and README_FILE_PATH will be replaced by builder.py
+    File /r "BINARY_DIR_PATH\*.*"
+    File "README_FILE_PATH"
 
     ; ── Desktop shortcut ────────────────────────────────────
     CreateShortcut "$DESKTOP\${APP_NAME}.lnk" \
-        "$INSTDIR\${APP_EXE}" "BIMOS_GUI" \
+        "$INSTDIR\${APP_EXE}" "-g" \
         "$INSTDIR\${APP_EXE}" 0
 
     ; ── Start Menu ──────────────────────────────────────────
     CreateDirectory "$SMPROGRAMS\${APP_NAME}"
     CreateShortcut  "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" \
-        "$INSTDIR\${APP_EXE}" "BIMOS_GUI" \
+        "$INSTDIR\${APP_EXE}" "-g" \
         "$INSTDIR\${APP_EXE}" 0
     CreateShortcut  "$SMPROGRAMS\${APP_NAME}\Uninstall ${APP_NAME}.lnk" \
         "$INSTDIR\Uninstall.exe"
@@ -87,16 +88,25 @@ Section "BIMOS Core (required)" SecCore
     WriteRegDWORD HKLM "${UNINSTALL_KEY}" "NoModify"         1
     WriteRegDWORD HKLM "${UNINSTALL_KEY}" "NoRepair"         1
 
-    ; ── PATH registration ───────────────────────────────────
-    EnVar::SetHKLM
-    EnVar::AddValue "PATH" "$INSTDIR"
+    ; ── Add install dir to system PATH (no extra plugin needed) ────────
+    ReadRegStr $0 HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "Path"
+    ; Only add if not already present
+    ClearErrors
+    ${WordFind} "$0" "$INSTDIR" "E+1" $1
+    ${If} ${Errors}
+        WriteRegExpandStr HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" \
+            "Path" "$0;$INSTDIR"
+        ; Broadcast the change so open terminals pick it up immediately
+        SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=5000
+    ${EndIf}
 
     WriteUninstaller "$INSTDIR\Uninstall.exe"
 SectionEnd
 
 Section "Docker images (recommended)" SecDocker
     SetOutPath "$INSTDIR\dockers"
-    File /r "backend\dockers\*.*"
+    ; DOCKERS_DIR_PATH will be replaced by builder.py
+    File /r "DOCKERS_DIR_PATH\*.*"
 SectionEnd
 
 ; ── Section descriptions ─────────────────────────────────────
@@ -121,8 +131,14 @@ Section "Uninstall"
     Delete "$DESKTOP\${APP_NAME}.lnk"
     RMDir  /r "$SMPROGRAMS\${APP_NAME}"
 
-    EnVar::SetHKLM
-    EnVar::DeleteValue "PATH" "$INSTDIR"
+    ; ── Remove install dir from system PATH ──────────────────────────
+    ReadRegStr $0 HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "Path"
+    ; Strip ";$INSTDIR" or "$INSTDIR;" or just "$INSTDIR"
+    ${WordReplace} $0 ";$INSTDIR" "" "+" $0
+    ${WordReplace} $0 "$INSTDIR;" "" "+" $0
+    ${WordReplace} $0 "$INSTDIR"  "" "+" $0
+    WriteRegExpandStr HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "Path" "$0"
+    SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=5000
 
     DeleteRegKey HKLM "${UNINSTALL_KEY}"
 SectionEnd
