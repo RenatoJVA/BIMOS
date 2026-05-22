@@ -1,6 +1,7 @@
 """BIMOS FastAPI application server and Desktop GUI runner."""
 
 import os
+import sys
 import time
 import threading
 import subprocess
@@ -150,7 +151,6 @@ def start_server(host: str = "127.0.0.1", port: int = 8000, desktop: bool = True
         if not _is_reachable(remote_url):
             print(f"\n\033[1;31mError:\033[0m Remote server {remote_url} is unreachable.")
             print("Please ensure the BIMOS API is running on the remote host or unset BIMOS_REMOTE_URL in your .env file.")
-            import sys
             sys.exit(1)
         target_url = remote_url
     else:
@@ -173,21 +173,29 @@ def start_server(host: str = "127.0.0.1", port: int = 8000, desktop: bool = True
     # Create native desktop window via pywebview
     import webview
 
-    # Environment variables to fix common rendering issues on Linux
-    os.environ["QTWEBENGINE_DISABLE_GBM"] = "1"
-    os.environ["QT_XCB_GL_INTEGRATION"] = "none"
-    os.environ["QT_QUICK_BACKEND"] = "software"
-    os.environ["LIBGL_ALWAYS_SOFTWARE"] = "1"
+    # Ensure Nuitka traces win32 (winforms imports it; the pywebview plugin omits it).
+    if sys.platform == "win32":
+        import webview.platforms.win32  # noqa: F401
 
-    # Silence Qt and X11 warnings (especially the "Cannot create platform OpenGL context" one)
-    os.environ["QT_LOGGING_RULES"] = (
-        "qt.qpa.xcb.gl=false;qt.qpa.gl=false;qt.quick.backend=false;*.debug=false;*.critical=false;*=false"
-    )
+    # Linux uses Qt/WebEngine; Windows uses WinForms + WebView2; macOS uses Cocoa.
+    desktop_gui = "qt" if sys.platform.startswith("linux") else None
 
-    # Disable GPU to fully avoid GBM/Vulkan fallback warnings if drivers are problematic
-    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
-        "--disable-gpu --num-raster-threads=4 --log-level=3 --silent --disable-logging"
-    )
+    if sys.platform.startswith("linux"):
+        # Environment variables to fix common rendering issues on Linux
+        os.environ["QTWEBENGINE_DISABLE_GBM"] = "1"
+        os.environ["QT_XCB_GL_INTEGRATION"] = "none"
+        os.environ["QT_QUICK_BACKEND"] = "software"
+        os.environ["LIBGL_ALWAYS_SOFTWARE"] = "1"
+
+        # Silence Qt and X11 warnings (especially the "Cannot create platform OpenGL context" one)
+        os.environ["QT_LOGGING_RULES"] = (
+            "qt.qpa.xcb.gl=false;qt.qpa.gl=false;qt.quick.backend=false;*.debug=false;*.critical=false;*=false"
+        )
+
+        # Disable GPU to fully avoid GBM/Vulkan fallback warnings if drivers are problematic
+        os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
+            "--disable-gpu --num-raster-threads=4 --log-level=3 --silent --disable-logging"
+        )
 
     # Pass the detected system theme as a URL query parameter.
     # QtWebEngine does NOT relay prefers-color-scheme from the OS automatically,
@@ -205,8 +213,7 @@ def start_server(host: str = "127.0.0.1", port: int = 8000, desktop: bool = True
         background_color=bg_color,
     )
 
-    # Start the native UI event loop forcing QT
-    webview.start(gui="qt", debug=False)
+    webview.start(gui=desktop_gui, debug=False)
 
     # Exiting abruptly to bypass QtWebEngine memory cleanup which triggers a Nuitka segfault.
     # The moment webview window is closed, it returns here.
