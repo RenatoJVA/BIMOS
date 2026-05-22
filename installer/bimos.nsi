@@ -41,9 +41,9 @@ SetCompressorDictSize 32
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
-!define MUI_FINISHPAGE_RUN         "$INSTDIR\${APP_EXE}"
-!define MUI_FINISHPAGE_RUN_TEXT    "Launch BIMOS now"
-!define MUI_FINISHPAGE_SHOWREADME  "$INSTDIR\README.md"
+!define MUI_FINISHPAGE_RUN              "$INSTDIR\${APP_EXE}"
+!define MUI_FINISHPAGE_RUN_TEXT         "Launch BIMOS now"
+!define MUI_FINISHPAGE_RUN_NOTCHECKED
 !insertmacro MUI_PAGE_FINISH
 
 ; ── Uninstaller pages ────────────────────────────────────────
@@ -103,7 +103,7 @@ Section "BIMOS Core (required)" SecCore
     WriteUninstaller "$INSTDIR\Uninstall.exe"
 SectionEnd
 
-Section "Docker images (recommended)" SecDocker
+Section "-Docker images (optional)" SecDocker
     SetOutPath "$INSTDIR\dockers"
     ; DOCKERS_DIR_PATH will be replaced by builder.py
     File /r "DOCKERS_DIR_PATH\*.*"
