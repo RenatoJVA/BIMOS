@@ -1,0 +1,176 @@
+name: Build & Package BIMOS
+
+on:
+  push:
+    tags:
+      - "v*.*.*"           # Trigger on version tags, e.g. v0.1.0
+  workflow_dispatch:       # Allow manual trigger
+
+permissions:
+  contents: write          # Needed to upload release assets
+
+# ── Shared env ────────────────────────────────────────────────────────────
+env:
+  APP_VERSION: ${{ github.ref_name }}   # e.g. v0.1.0
+
+jobs:
+  # ╔══════════════════════════════════════╗
+  # ║  Linux → .deb                        ║
+  # ╚══════════════════════════════════════╝
+  build-linux:
+    name: Linux (.deb)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install fpm
+        run: |
+          sudo apt-get install -y ruby ruby-dev build-essential
+          sudo gem install fpm --no-document
+
+      - name: Install NSIS (for cross-build optional)
+        run: sudo apt-get install -y nsis
+
+      - name: Install Python deps (uv)
+        run: uv sync
+        working-directory: backend
+
+      - name: Restore Nuitka cache
+        uses: actions/cache@v4
+        with:
+          path: backend/main.onefile-build
+          key: nuitka-linux-${{ hashFiles('backend/pyproject.toml') }}
+
+      - name: Build (frontend + nuitka + .deb)
+        run: python builder.py --target linux
+        env:
+          BIMOS_VERSION: ${{ github.ref_name }}
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bimos-linux-deb
+          path: installer/dist/*.deb
+
+  # ╔══════════════════════════════════════╗
+  # ║  Windows → .exe (NSIS)               ║
+  # ╚══════════════════════════════════════╝
+  build-windows:
+    name: Windows (.exe)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install Python deps (uv)
+        run: uv sync
+        working-directory: backend
+
+      - name: Restore Nuitka cache
+        uses: actions/cache@v4
+        with:
+          path: backend/main.onefile-build
+          key: nuitka-windows-${{ hashFiles('backend/pyproject.toml') }}
+
+      - name: Build (frontend + nuitka + NSIS)
+        shell: pwsh
+        run: python builder.py --target windows
+
+      - name: Upload .exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bimos-windows-exe
+          path: installer/dist/*.exe
+
+  # ╔══════════════════════════════════════╗
+  # ║  macOS → .dmg                        ║
+  # ╚══════════════════════════════════════╝
+  build-macos:
+    name: macOS (.dmg)
+    runs-on: macos-14        # Apple Silicon runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Install Python deps (uv)
+        run: uv sync
+        working-directory: backend
+
+      - name: Restore Nuitka cache
+        uses: actions/cache@v4
+        with:
+          path: backend/main.onefile-build
+          key: nuitka-macos-${{ hashFiles('backend/pyproject.toml') }}
+
+      - name: Build (frontend + nuitka + DMG)
+        run: python builder.py --target macos
+
+      - name: Upload .dmg artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bimos-macos-dmg
+          path: installer/dist/*.dmg
+
+  # ╔══════════════════════════════════════╗
+  # ║  GitHub Release                      ║
+  # ╚══════════════════════════════════════╝
+  release:
+    name: Create GitHub Release
+    needs: [build-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "BIMOS ${{ github.ref_name }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: release-assets/**
