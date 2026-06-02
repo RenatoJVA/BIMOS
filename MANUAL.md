@@ -133,7 +133,18 @@ Key variables you can customize:
 
 ---
 
-## 5. Troubleshooting
+## 6. Legal Disclaimer
+
+> [!CAUTION]
+> **BIMOS does not distribute or license third-party computational tools.**
+>
+> - **ORCA** and **Gaussian 16** are commercial software. You must obtain your own valid licenses from their respective vendors. BIMOS only provides automation scripts that call these tools if already installed.
+> - **AutoDock Vina**, **GROMACS**, **ESMFold**, and **Boltz-1** are open-source but subject to their own licenses. They are not bundled with BIMOS.
+> - BIMOS is provided **"as is"** without any warranty. The authors are not responsible for results, data loss, or legal issues arising from its use.
+>
+> See [README.md](./README.md) for full terms and citation requirements.
+
+## 7. Troubleshooting
 
 - **White Screen on Launch**: If you launch the GUI (`bimos -g`) and see a white screen, check your `~/.bimos/.env` file. If `BIMOS_REMOTE_URL` is enabled but the remote server is unreachable, the UI will stall. Comment it out to run locally.
 - **Segment Fault (Linux)**: Some Linux distributions lack compatible OpenGL libraries for the desktop interface. BIMOS attempts to enforce software rendering automatically, but ensure your display server supports standard rendering.

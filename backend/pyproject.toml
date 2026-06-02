@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "Biomolecular Modeling Suite — CLI-first backend"
 readme = "README.md"
 requires-python = ">=3.12"
+authors = [
+    { name = "Renato J. V. A.", email = "renatojva@example.com" },
+]
 dependencies = [
     # CLI
     "click>=8.1.7",

@@ -1,49 +1,59 @@
 # BIMOS Frontend
 
-Welcome to the **Biomolecular Modeling Suite (BIMOS)** Frontend. This is a lightweight, minimalist, and responsive dashboard designed to interface with the robust BIMOS Python CLI/Backend.
+**Biomolecular Modeling Suite — Desktop Dashboard**
+
+A lightweight, responsive desktop interface for monitoring and managing BIMOS computational jobs.
 
 ## Overview
 
-BIMOS is primarily a **CLI-first** engine, but this frontend exists to offer a premium graphical interface for monitoring and interacting with long-running scientific jobs (like ESMFold structure prediction, Vina molecular docking, and GROMACS molecular dynamics).
+BIMOS is primarily a **CLI-first** engine. This frontend provides a premium graphical dashboard for tracking long-running scientific jobs (ESMFold structure prediction, Vina docking, GROMACS MD, QM pipelines).
 
-## Architecture
+## Tech Stack
 
-* **Framework:** React + TypeScript + Vite.
-* **Styling:** Vanilla CSS (for maximum flexibility and a rich, glassmorphic aesthetic).
-* **Communication:** Standard `fetch` calls to the FastAPI backend running on `http://127.0.0.1:8000`.
+- **React 18** + **TypeScript**
+- **Vite** for build tooling
+- **Vanilla CSS** — glassmorphic dark/light theme
+- **Fetch API** → FastAPI backend at `http://127.0.0.1:8000`
 
-## Quick Start
+## Development
 
-1. **Start the Backend:**
-   Ensure the BIMOS backend is running in GUI mode:
-   ```bash
-   cd ../backend
-   python main.py gui
-   ```
-   *Note: This automatically starts the backend API on port 8000.*
+```bash
+cd frontend
+bun install     # or npm install
+bun run dev     # or npm run dev
+bun run build   # production build
+```
 
-2. **Run the Frontend (Development):**
-   Open a new terminal and navigate to this folder:
-   ```bash
-   cd ../frontend
-   bun install  # or npm install
-   bun run dev  # or npm run dev
-   ```
+The built assets are copied to `backend/bimos/ui/` by the build script (`builder.py`).
 
-3. **Production Build:**
-   ```bash
-   bun run build
-   ```
+## Citation
 
-## Development Guide
+If you use the BIMOS desktop interface in your research, please cite:
 
-### Folder Structure
-* `src/main.tsx`: React entry point.
-* `src/App.tsx`: Main dashboard component containing the UI layout.
-* `src/index.css`: Global design tokens, color palettes, and micro-animations.
+```bibtex
+@software{bimos2025,
+  author    = {Renato J. V. A. and Ponze Bellido, L. J. and Quispe Ppacco, D. J. and Carbajal, P. and Del Carpio, F. and Gómez Valdez, B.},
+  title     = {BIMOS: Biomolecular Modeling Suite},
+  year      = {2025},
+  url       = {https://github.com/RenatoJVA/BIMOS},
+  note      = {Version 0.1.0}
+}
+```
 
-### Modifying the API connection
-By default, the frontend expects the backend at `http://localhost:8000`. If you deploy the backend remotely or change the port via `.env`, update the `API_BASE` constant in `src/App.tsx`.
+---
 
-### Design System
-The UI utilizes a dark-mode first, glassmorphism aesthetic. All tokens (colors, fonts, borders) are defined in `src/index.css` under `:root`. To maintain the premium feel, stick to these variables when adding new components.
+## Author
+
+**Renato J. V. A.** — Lead Developer
+
+## Team
+
+- L. J. Ponze Bellido — Coauthor
+- D. J. Quispe Ppacco — Coauthor
+- P. Carbajal — Coauthor
+- F. Del Carpio — Coauthor
+- B. Gómez Valdez (Director, CIIM) — Coauthor
+
+---
+
+*Part of the [BIMOS](https://github.com/RenatoJVA/BIMOS) project — Biomolecular Modeling Suite.*
