@@ -45,6 +45,19 @@ workspace/
 # Database
 /backend/data/*.sql
 
+# Installer outputs & staging
+installer/dist/
+installer/staging/
+installer/_bimos_patched.nsi
+
+# Binary assets (generate locally — see installer/assets/README.md)
+installer/assets/bimos.ico
+installer/assets/bimos.icns
+installer/assets/bimos.png
+installer/assets/wizard_banner.bmp
+installer/assets/header.bmp
+installer/assets/dmg_background.png
+
 # OS Specific
 .DS_Store
 Thumbs.db

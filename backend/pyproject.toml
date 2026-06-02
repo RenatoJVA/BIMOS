@@ -21,9 +21,10 @@ dependencies = [
     # Obfuscation (optional, used in build pipeline)
     "nuitka>=2.4.0",
     "pywebview>=6.2.1",
-    "pyqt6>=6.11.0",
-    "pyqt6-webengine>=6.11.0",
-    "qtpy>=2.4.3",
+    "pythonnet>=3.0.5; sys_platform == 'win32'",
+    "pyqt6>=6.11.0; sys_platform != 'win32'",
+    "pyqt6-webengine>=6.11.0; sys_platform != 'win32'",
+    "qtpy>=2.4.3; sys_platform != 'win32'",
     "zstandard>=0.25.0",
     "pyyaml>=6.0.3",
     "psutil>=5.9.0",
