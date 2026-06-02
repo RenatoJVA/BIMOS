@@ -1,5 +1,5 @@
 ; ============================================================
-;  BIMOS — Windows NSIS Installer Script
+;  BIMOS - Windows NSIS Installer Script
 ;  Requires: NSIS >= 3.09, MUI2
 ;  Build:  makensis installer/bimos.nsi
 ; ============================================================
@@ -14,12 +14,12 @@
 !define INSTALL_DIR     "$PROGRAMFILES64\${APP_NAME}"
 !define UNINSTALL_KEY   "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
 
-; ── MUI2 Modern UI ───────────────────────────────────────────
+; --- MUI2 Modern UI ---
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 !include "WordFunc.nsh"
 
-; ── Installer metadata ───────────────────────────────────────
+; --- Installer metadata ---
 Name              "${APP_NAME} ${APP_VERSION}"
 OutFile           "dist\BIMOS-${APP_VERSION}-Setup.exe"
 InstallDir        "${INSTALL_DIR}"
@@ -28,13 +28,13 @@ RequestExecutionLevel admin
 SetCompressor     /SOLID lzma
 SetCompressorDictSize 32
 
-; ── MUI Settings ─────────────────────────────────────────────
+; --- MUI Settings ---
 !define MUI_ABORTWARNING
 ; OPTIONAL: MUI_ICON, MUI_UNICON (set by builder.py if assets exist)
 ; OPTIONAL: MUI_WELCOMEFINISHPAGE_BITMAP, MUI_UNWELCOMEFINISHPAGE_BITMAP
 ; OPTIONAL: MUI_HEADERIMAGE, MUI_HEADERIMAGE_BITMAP, MUI_HEADERIMAGE_RIGHT
 
-; ── Pages ────────────────────────────────────────────────────
+; --- Pages ---
 !insertmacro MUI_PAGE_WELCOME
 ; LICENSE_FILE_PATH will be replaced by builder.py
 !insertmacro MUI_PAGE_LICENSE      "LICENSE_FILE_PATH"
@@ -46,11 +46,11 @@ SetCompressorDictSize 32
 !define MUI_FINISHPAGE_RUN_NOTCHECKED
 !insertmacro MUI_PAGE_FINISH
 
-; ── Uninstaller pages ────────────────────────────────────────
+; --- Uninstaller pages ---
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 
-; ── Languages ────────────────────────────────────────────────
+; --- Languages ---
 !insertmacro MUI_LANGUAGE "English"
 !insertmacro MUI_LANGUAGE "Spanish"
 
@@ -65,12 +65,12 @@ Section "BIMOS Core (required)" SecCore
     File /r "BINARY_DIR_PATH\*.*"
     File "README_FILE_PATH"
 
-    ; ── Desktop shortcut ────────────────────────────────────
+    ; --- Desktop shortcut ---
     CreateShortcut "$DESKTOP\${APP_NAME}.lnk" \
         "$INSTDIR\${APP_EXE}" "-g" \
         "$INSTDIR\${APP_EXE}" 0
 
-    ; ── Start Menu ──────────────────────────────────────────
+    ; --- Start Menu ---
     CreateDirectory "$SMPROGRAMS\${APP_NAME}"
     CreateShortcut  "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" \
         "$INSTDIR\${APP_EXE}" "-g" \
@@ -78,7 +78,7 @@ Section "BIMOS Core (required)" SecCore
     CreateShortcut  "$SMPROGRAMS\${APP_NAME}\Uninstall ${APP_NAME}.lnk" \
         "$INSTDIR\Uninstall.exe"
 
-    ; ── Registry: Add/Remove Programs ───────────────────────
+    ; --- Registry: Add/Remove Programs ---
     WriteRegStr   HKLM "${UNINSTALL_KEY}" "DisplayName"      "${APP_NAME}"
     WriteRegStr   HKLM "${UNINSTALL_KEY}" "DisplayVersion"   "${APP_VERSION}"
     WriteRegStr   HKLM "${UNINSTALL_KEY}" "Publisher"        "${APP_PUBLISHER}"
@@ -88,7 +88,7 @@ Section "BIMOS Core (required)" SecCore
     WriteRegDWORD HKLM "${UNINSTALL_KEY}" "NoModify"         1
     WriteRegDWORD HKLM "${UNINSTALL_KEY}" "NoRepair"         1
 
-    ; ── Add install dir to system PATH (no extra plugin needed) ────────
+    ; --- Add install dir to system PATH (no extra plugin needed) ---
     ReadRegStr $0 HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "Path"
     ; Only add if not already present
     ClearErrors
@@ -109,7 +109,7 @@ Section "-Docker images (optional)" SecDocker
     File /r "DOCKERS_DIR_PATH\*.*"
 SectionEnd
 
-; ── Section descriptions ─────────────────────────────────────
+; --- Section descriptions ---
 LangString DESC_SecCore   ${LANG_ENGLISH} "Core BIMOS application and GUI launcher."
 LangString DESC_SecDocker ${LANG_ENGLISH} "Bundled Docker compose files for docking/MD pipelines."
 
@@ -131,7 +131,7 @@ Section "Uninstall"
     Delete "$DESKTOP\${APP_NAME}.lnk"
     RMDir  /r "$SMPROGRAMS\${APP_NAME}"
 
-    ; ── Remove install dir from system PATH ──────────────────────────
+    ; --- Remove install dir from system PATH ---
     ReadRegStr $0 HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "Path"
     ; Strip ";$INSTDIR" or "$INSTDIR;" or just "$INSTDIR"
     ${WordReplace} $0 ";$INSTDIR" "" "+" $0

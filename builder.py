@@ -188,7 +188,7 @@ def package_windows_nsis(root: Path, version: str):
             r"BIMOS — Biomolecular Modeling Suite\par"
             r"\par"
             r"This software is provided as-is. See project LICENSE for terms.\par"
-            r"}"
+            r"}", encoding='utf-8'
         )
         ok(f"Created default LICENSE.rtf")
 
@@ -213,7 +213,7 @@ def package_windows_nsis(root: Path, version: str):
     nsi_script = root / "installer" / "bimos.nsi"
 
     # Patch NSI with absolute paths
-    nsi_text = nsi_script.read_text()
+    nsi_text = nsi_script.read_text(encoding='utf-8')
     nsi_patched = nsi_text.replace(
         'OutFile           "dist\\BIMOS-',
         f'OutFile           "{out_dir}\\BIMOS-',
@@ -266,7 +266,7 @@ def package_windows_nsis(root: Path, version: str):
         )
 
     patched_nsi = root / "installer" / "_bimos_patched.nsi"
-    patched_nsi.write_text(nsi_patched)
+    patched_nsi.write_text(nsi_patched, encoding='utf-8')
 
     try:
         run([makensis, f"/DAPP_VERSION={version}", str(patched_nsi)], cwd=root)
