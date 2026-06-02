@@ -56,6 +56,25 @@ def _detect_system_dark_mode() -> bool:
     Detect whether the OS is currently in dark mode using safe subprocess calls.
     Returns True if dark, False if light.
     """
+    # Method 0 (Windows): Read from Windows Registry
+    if sys.platform == "win32":
+        try:
+            import winreg
+            try:
+                key = winreg.OpenKey(
+                    winreg.HKEY_CURRENT_USER,
+                    r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+                )
+                # AppsUseLightTheme: 1 = light, 0 = dark
+                value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+                winreg.CloseKey(key)
+                return value == 0  # True if dark (0), False if light (1)
+            except (OSError, FileNotFoundError):
+                # Registry key not found — fall through
+                pass
+        except Exception:
+            pass
+    
     # Method 1: dconf — reads the actual user value (Ubuntu/Yaru stores it here
     # while gsettings may return the schema default instead of the override).
     try:
