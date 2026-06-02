@@ -10,7 +10,6 @@ ENV/
 .env
 *.egg-info/
 .installed.cfg
-.pytest_cache/
 
 # Build & Obfuscation (Nuitka)
 build/
@@ -57,6 +56,16 @@ installer/assets/bimos.png
 installer/assets/wizard_banner.bmp
 installer/assets/header.bmp
 installer/assets/dmg_background.png
+
+# Testing & Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Local database files
+*.db
+*.sqlite
+*.sqlite3
 
 # OS Specific
 .DS_Store
