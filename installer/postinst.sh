@@ -6,8 +6,16 @@
 set -e
 
 # ── Permissions ───────────────────────────────────────────
+# The wrapper at /usr/bin/bimos (set by fpm)
 chmod 755 /usr/bin/bimos
-chmod -R 755 /opt/bimos/dockers
+# The full lib tree (binary + .so dependencies from Nuitka standalone)
+if [ -d /opt/bimos/lib ]; then
+    chmod -R 755 /opt/bimos/lib
+fi
+# Docker pipeline files
+if [ -d /opt/bimos/dockers ]; then
+    chmod -R 755 /opt/bimos/dockers
+fi
 
 # ── Desktop database ──────────────────────────────────────
 if command -v update-desktop-database >/dev/null 2>&1; then
