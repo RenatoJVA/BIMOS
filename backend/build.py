@@ -92,6 +92,8 @@ def main():
         # Linux / macOS: Qt desktop via pywebview + PyQt6 (plugin handles webview)
         cmd.insert(len(cmd) - 5, "--include-package=qtpy")
         cmd.insert(len(cmd) - 5, "--enable-plugin=pyqt6")
+        # Avoid name conflict with data-dir bimos/ (on Windows .exe suffix avoids it)
+        cmd[cmd.index("--output-filename=bimos")] = "--output-filename=bimos.bin"
 
     print(f"Running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
