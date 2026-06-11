@@ -99,9 +99,9 @@ def package_linux_deb(root: Path, version: str):
     info("Packaging → Linux .deb (fpm)...")
     require("fpm", "Install fpm: gem install fpm  OR  apt install ruby-dev && gem install fpm")
 
-    binary = root / "backend" / "dist" / "bimos"
-    if not binary.exists():
-        error(f"Binary not found: {binary}")
+    binary_dir = root / "backend" / "dist" / "main.dist"
+    if not (binary_dir / "bimos.bin").exists():
+        error(f"Binary not found: {binary_dir / 'bimos.bin'}")
         sys.exit(1)
 
     out_dir = root / "installer" / "dist"
@@ -129,14 +129,30 @@ def package_linux_deb(root: Path, version: str):
         "--force",
     ]
 
+    # Create the shell wrapper that will go at /usr/bin/bimos
+    wrapper = root / "installer" / "assets" / "bimos-wrapper.sh"
+    wrapper.parent.mkdir(parents=True, exist_ok=True)
+    wrapper.write_text("#!/bin/sh\nexec /opt/bimos/lib/bimos.bin \"$@\"\n")
+    wrapper.chmod(0o755)
+
     # Map: source=destination
+    #   - trailing slash on source dirs extracts *contents* rather than the dir itself
+    #   - bimos.bin RPATH = $ORIGIN, so .so deps must live alongside it
     file_mappings = [
-        (str(binary),                                     "/usr/bin/bimos"),
-        (str(root / "backend" / "dockers"),               "/opt/bimos/dockers"),
+        (f"{binary_dir}/",                                "/opt/bimos/lib"),
+        (str(wrapper),                                    "/usr/bin/bimos"),
         (str(root / "backend" / "README.md"),             "/usr/share/doc/bimos/README.md"),
         (str(root / "installer" / "assets" / "bimos.desktop"),
                                                           "/usr/share/applications/bimos.desktop"),
     ]
+
+    # Dockers: map contents directly (avoid double nesting)
+    dockers_src = root / "backend" / "dockers"
+    for f in dockers_src.iterdir():
+        if f.is_file():
+            file_mappings.append((str(f), f"/opt/bimos/dockers/{f.name}"))
+        elif f.is_dir():
+            file_mappings.append((f"{f}/", f"/opt/bimos/dockers/{f.name}"))
 
     icon = root / "installer" / "assets" / "bimos.png"
     if icon.exists():
