@@ -223,7 +223,7 @@ def start_server(host: str = "127.0.0.1", port: int = 8000, desktop: bool = True
     sep = "&" if "?" in target_url else "?"
     url = f"{target_url}{sep}systemTheme={system_theme}"
 
-    webview.create_window(
+    window = webview.create_window(
         "BIMOS Dashboard",
         url,
         width=1200,
@@ -232,7 +232,22 @@ def start_server(host: str = "127.0.0.1", port: int = 8000, desktop: bool = True
         background_color=bg_color,
     )
 
-    webview.start(gui=desktop_gui, debug=False)
+    def _on_start():
+        icon_path = UI_DIR / "BIMOS-500px.png"
+        if icon_path.exists() and hasattr(window, "set_icon"):
+            window.set_icon(str(icon_path))
+
+        if sys.platform.startswith("linux"):
+            try:
+                from PyQt6.QtGui import QGuiApplication
+                app = QGuiApplication.instance()
+                if app:
+                    app.setDesktopFileName("bimos")
+                    app.setApplicationName("BIMOS")
+            except ImportError:
+                pass
+
+    webview.start(gui=desktop_gui, debug=False, func=_on_start)
 
     # Exiting abruptly to bypass QtWebEngine memory cleanup which triggers a Nuitka segfault.
     # The moment webview window is closed, it returns here.

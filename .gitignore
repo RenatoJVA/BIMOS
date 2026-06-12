@@ -53,6 +53,7 @@ installer/_bimos_patched.nsi
 installer/assets/bimos.ico
 installer/assets/bimos.icns
 installer/assets/bimos.png
+installer/assets/bimos.iconset/
 installer/assets/wizard_banner.bmp
 installer/assets/header.bmp
 installer/assets/dmg_background.png
