@@ -8,30 +8,34 @@ authors = [
     { name = "Renato J. V. A.", email = "renatojva@example.com" },
 ]
 dependencies = [
-    # CLI
     "click>=8.1.7",
-    # API server (GUI mode)
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
     "python-multipart>=0.0.9",
-    # Data validation
     "pydantic>=2.7.0",
-    # Configuration
     "python-dotenv>=1.0.0",
-    # Database
+    "pyyaml>=6.0.3",
+    "rich-click>=1.9.7",
+]
+
+[project.optional-dependencies]
+db = [
     "sqlalchemy>=2.0.30",
     "psycopg2-binary>=2.9.9",
-    # Obfuscation (optional, used in build pipeline)
-    "nuitka>=2.4.0",
+]
+gui = [
     "pywebview>=6.2.1",
     "pythonnet>=3.0.5; sys_platform == 'win32'",
     "pyqt6>=6.11.0; sys_platform != 'win32'",
     "pyqt6-webengine>=6.11.0; sys_platform != 'win32'",
     "qtpy>=2.4.3; sys_platform != 'win32'",
-    "zstandard>=0.25.0",
-    "pyyaml>=6.0.3",
+]
+monitoring = [
     "psutil>=5.9.0",
-    "rich-click>=1.9.7",
+    "zstandard>=0.25.0",
+]
+build = [
+    "nuitka>=2.4.0",
 ]
 
 [project.scripts]
@@ -49,5 +53,86 @@ include = ["bimos/config/defaults/*"]
 dev = [
     "ruff>=0.4.0",
     "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
     "httpx>=0.27.0",
+    "types-pyyaml>=6.0.12.20260518",
+    "types-psutil>=7.2.2.20260518",
+    "mkdocs>=1.6.0",
+    "mkdocs-material>=9.5.0",
+    "mkdocstrings[python]>=0.25.0",
 ]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+python_files = ["test_*.py"]
+addopts = "-v --tb=short --strict-markers --strict-config"
+markers = [
+    "slow: Pruebas lentas (>10s), omitir con -m 'not slow'",
+    "e2e: Pruebas end-to-end que requieren Docker",
+    "gpu: Pruebas que requieren GPU",
+    "security: Pruebas de seguridad",
+    "performance: Pruebas de rendimiento",
+]
+filterwarnings = [
+    'ignore::PendingDeprecationWarning',
+    'ignore::DeprecationWarning:fastapi',
+    'ignore::DeprecationWarning:pydantic',
+]
+
+[tool.coverage.run]
+source = ["bimos"]
+omit = ["bimos/ui/*", "bimos/scripts/*"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 75
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 110
+
+[tool.ruff.lint]
+select = [
+    "E", "W", "F",
+    "I",
+    "N",
+    "UP",
+    "B", "B9",
+    "SIM",
+    "ARG",
+    "C4",
+    "T10",
+    "S",
+    "PLE", "PLR",
+    "RUF",
+]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mutmut]
+source_paths = ["bimos"]
+pytest_add_cli_args = ["--ignore=tests/integration", "--ignore=tests/security", "--ignore=tests/e2e", "--ignore=tests/performance", "--ignore=tests/mutation", "--ignore=tests/unit/test_container.py", "--ignore=tests/unit/test_job_store.py", "-x", "-q", "--tb=short"]
+pytest_add_cli_args_test_selection = ["tests/unit/test_paths.py", "tests/unit/test_templates.py", "tests/unit/test_elements.py"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_any_generics = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+check_untyped_defs = true
+exclude = ["bimos/scripts/"]
+
+[[tool.mypy.overrides]]
+module = ["bimos.shared.user_config"]
+ignore_missing_imports = true
+
+

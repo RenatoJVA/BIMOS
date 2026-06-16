@@ -120,8 +120,10 @@ def run(
         )
 
         if stdin_text is not None and process.stdin:
-            process.stdin.write(stdin_text)
-            process.stdin.close()
+            try:
+                process.stdin.write(stdin_text)
+            finally:
+                process.stdin.close()
 
         if process.stdout:
             for line in process.stdout:
@@ -136,7 +138,7 @@ def run(
         job_id = current_job_id.get()
         if job_id:
             job = store.get(job_id)
-            if not job or job.status == JobStatus.CANCELED:
+            if job and job.status == JobStatus.CANCELED:
                 raise RuntimeError(f"Job {job_id} was canceled by user.")
         return rc
 

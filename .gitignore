@@ -19,6 +19,10 @@ dist/
 *.onefile-build/
 bimos-cli
 nuitka-crash-report.xml
+*.spec
+
+# Mutation testing copies
+backend/mutants/
 
 # Node.js (Frontend)
 node_modules/
@@ -59,8 +63,12 @@ installer/assets/dmg_background.png
 
 # Testing & Coverage
 .coverage
+.coverage.*
 htmlcov/
+backend/htmlcov/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # Local database files
 *.db
@@ -70,3 +78,12 @@ htmlcov/
 # OS Specific
 .DS_Store
 Thumbs.db
+
+# Documentation site output (mkdocs)
+site/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo

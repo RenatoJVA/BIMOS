@@ -68,7 +68,7 @@ class QMPipeline(Pipeline):
 class OrcaPipeline(QMPipeline):
     """ORCA Hirshfeld charge pipeline."""
 
-    def run(self, directory: str) -> dict[str, Any]:
+    def run(self, directory: str) -> dict[str, Any]:  # type: ignore[override]
         dir_path = Path(directory).resolve()
         orca_bin = settings.orca_path
         if not orca_bin or not Path(orca_bin).exists():
@@ -79,7 +79,7 @@ class OrcaPipeline(QMPipeline):
         gro_files = sorted(dir_path.glob("*.gro"))
         self.log(f"Found {len(gro_files)} .gro files in {dir_path}")
 
-        processes: list[tuple[subprocess.Popen, Any, Path]] = []
+        processes: list[tuple[subprocess.Popen[bytes], Any, Path]] = []
         for gro in gro_files:
             inp_path = gro.with_suffix(".inp")
             _, atoms = self._gro_to_xyz(gro, dir_path)
@@ -102,7 +102,6 @@ class OrcaPipeline(QMPipeline):
             )
 
             out_path = inp_path.with_suffix(".out")
-            out_file = open(out_path, "w", encoding="utf-8")
             env = dict(os.environ)
             orca_dir = str(Path(orca_bin).parent)
             env["PATH"] = f"{orca_dir}:{env.get('PATH', '')}"
@@ -113,18 +112,23 @@ class OrcaPipeline(QMPipeline):
                 time.sleep(1)
 
             self.log(f"Launching ORCA for {gro.name}")
-            proc = subprocess.Popen(
-                [orca_bin, inp_path.name],
-                stdout=out_file,
-                stderr=out_file,
-                cwd=str(dir_path),
-                env=env,
-            )
-            processes.append((proc, out_file, gro))
+            with open(out_path, "w", encoding="utf-8") as out_file:
+                proc = subprocess.Popen(
+                    [orca_bin, inp_path.name],
+                    stdout=out_file,
+                    stderr=out_file,
+                    cwd=str(dir_path),
+                    env=env,
+                )
+            processes.append((proc, gro))
 
-        for proc, handle, _ in processes:
-            proc.wait()
-            handle.close()
+        for proc, gro in processes:
+            try:
+                proc.wait(timeout=86400)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+                self.log(f"ORCA process timed out for {gro.name}", level="WARNING")
 
         results: list[str] = []
         pattern = re.compile(r"^\s*\d+\s+[A-Z][a-zA-Z]?\s+([-]?\d+\.\d+)")
@@ -159,7 +163,7 @@ class OrcaPipeline(QMPipeline):
 class GaussianPipeline(QMPipeline):
     """Gaussian Hirshfeld charge pipeline."""
 
-    def run(self, directory: str) -> dict[str, Any]:
+    def run(self, directory: str) -> dict[str, Any]:  # type: ignore[override]
         dir_path = Path(directory).resolve()
         g16_bin = settings.gaussian_path
         if not g16_bin or not Path(g16_bin).exists():
@@ -170,7 +174,7 @@ class GaussianPipeline(QMPipeline):
         gro_files = sorted(dir_path.glob("*.gro"))
         self.log(f"Found {len(gro_files)} .gro files in {dir_path}")
 
-        processes: list[tuple[subprocess.Popen, Any, Path]] = []
+        processes: list[tuple[subprocess.Popen[bytes], Any, Path]] = []
         for gro in gro_files:
             gjf_path = gro.with_suffix(".gjf")
             _, atoms = self._gro_to_xyz(gro, dir_path)
@@ -193,23 +197,27 @@ class GaussianPipeline(QMPipeline):
             )
 
             log_path = gjf_path.with_suffix(".log")
-            log_file = open(log_path, "w", encoding="utf-8")
 
             while len([item for item in processes if item[0].poll() is None]) >= cfg.max_jobs:
                 time.sleep(1)
 
             self.log(f"Launching Gaussian for {gro.name}")
-            proc = subprocess.Popen(
-                [g16_bin, gjf_path.name],
-                stdout=log_file,
-                stderr=log_file,
-                cwd=str(dir_path),
-            )
-            processes.append((proc, log_file, gro))
+            with open(log_path, "w", encoding="utf-8") as log_file:
+                proc = subprocess.Popen(
+                    [g16_bin, gjf_path.name],
+                    stdout=log_file,
+                    stderr=log_file,
+                    cwd=str(dir_path),
+                )
+            processes.append((proc, gro))
 
-        for proc, handle, _ in processes:
-            proc.wait()
-            handle.close()
+        for proc, gro in processes:
+            try:
+                proc.wait(timeout=86400)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+                self.log(f"Gaussian process timed out for {gro.name}", level="WARNING")
 
         results: list[str] = []
         pattern = re.compile(r"^\s*(\d+)\s+([A-Z][a-zA-Z]?)\s+([-]?\d+\.\d+)")

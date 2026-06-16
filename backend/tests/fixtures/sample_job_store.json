@@ -1,0 +1,12 @@
+{
+  "id": "abc123",
+  "kind": "dock",
+  "status": "completed",
+  "created_at": "2026-06-14T10:00:00+00:00",
+  "started_at": "2026-06-14T10:00:05+00:00",
+  "finished_at": "2026-06-14T10:05:30+00:00",
+  "error": null,
+  "output_dir": "/tmp/bimos_test_ws/docking/test",
+  "meta": {"protein": "test.pdb", "ligands": "test.sdf"},
+  "results": {"status": "completed", "scores": [-7.5, -6.2]}
+}

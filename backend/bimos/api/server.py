@@ -30,8 +30,9 @@ app.add_middleware(
 
 app.include_router(router)
 
+
 @app.get("/api/v1/system/theme")
-async def get_system_theme():
+async def get_system_theme():  # type: ignore[no-untyped-def]
     """Endpoint for the frontend to poll the current OS theme."""
     is_dark = _detect_system_dark_mode()
     return {"theme": "dark" if is_dark else "light"}
@@ -46,8 +47,9 @@ if UI_DIR.exists() and UI_DIR.is_dir():
     # Mount the frontend assets at root for direct access
     app.mount("/", StaticFiles(directory=str(UI_DIR), html=True), name="ui")
 else:
+
     @app.get("/")
-    async def root():
+    async def root():  # type: ignore[no-untyped-def]
         return {"name": "BIMOS", "version": "0.1.0", "docs": "/docs", "ui": "Not compiled"}
 
 
@@ -60,6 +62,7 @@ def _detect_system_dark_mode() -> bool:
     if sys.platform == "win32":
         try:
             import winreg
+
             try:
                 key = winreg.OpenKey(
                     winreg.HKEY_CURRENT_USER,
@@ -74,13 +77,15 @@ def _detect_system_dark_mode() -> bool:
                 pass
         except Exception:
             pass
-    
+
     # Method 1: dconf — reads the actual user value (Ubuntu/Yaru stores it here
     # while gsettings may return the schema default instead of the override).
     try:
         r = subprocess.run(
             ["dconf", "read", "/org/gnome/desktop/interface/color-scheme"],
-            capture_output=True, text=True, timeout=2,
+            capture_output=True,
+            text=True,
+            timeout=2,
         )
         if r.returncode == 0:
             val = r.stdout.strip().strip("'")
@@ -96,7 +101,9 @@ def _detect_system_dark_mode() -> bool:
     try:
         r = subprocess.run(
             ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
-            capture_output=True, text=True, timeout=2,
+            capture_output=True,
+            text=True,
+            timeout=2,
         )
         if r.returncode == 0:
             val = r.stdout.strip().strip("'")
@@ -112,7 +119,9 @@ def _detect_system_dark_mode() -> bool:
     try:
         r = subprocess.run(
             ["gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"],
-            capture_output=True, text=True, timeout=2,
+            capture_output=True,
+            text=True,
+            timeout=2,
         )
         if r.returncode == 0 and "dark" in r.stdout.lower():
             return True
@@ -123,7 +132,9 @@ def _detect_system_dark_mode() -> bool:
     try:
         r = subprocess.run(
             ["kreadconfig5", "--group", "General", "--key", "ColorScheme"],
-            capture_output=True, text=True, timeout=2,
+            capture_output=True,
+            text=True,
+            timeout=2,
         )
         if r.returncode == 0 and "dark" in r.stdout.lower():
             return True
@@ -140,7 +151,7 @@ def _detect_system_dark_mode() -> bool:
     return False  # default: light
 
 
-def _run_server(host: str, port: int):
+def _run_server(host: str, port: int):  # type: ignore[no-untyped-def]
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 
@@ -158,7 +169,9 @@ def _is_reachable(url: str, timeout: int = 3) -> bool:
         return False
 
 
-def start_server(host: str = "127.0.0.1", port: int = 8000, desktop: bool = True, remote_url: str = "") -> None:
+def start_server(
+    host: str = "127.0.0.1", port: int = 8000, desktop: bool = True, remote_url: str = ""
+) -> None:
     """
     Start the FastAPI server. If desktop is True, run it in a background thread
     and start a native pywebview window for a seamless desktop app experience.
@@ -169,7 +182,9 @@ def start_server(host: str = "127.0.0.1", port: int = 8000, desktop: bool = True
     if remote_url:
         if not _is_reachable(remote_url):
             print(f"\n\033[1;31mError:\033[0m Remote server {remote_url} is unreachable.")
-            print("Please ensure the BIMOS API is running on the remote host or unset BIMOS_REMOTE_URL in your .env file.")
+            print(
+                "Please ensure the BIMOS API is running on the remote host or unset BIMOS_REMOTE_URL in your .env file."
+            )
             sys.exit(1)
         target_url = remote_url
     else:
@@ -232,8 +247,22 @@ def start_server(host: str = "127.0.0.1", port: int = 8000, desktop: bool = True
         background_color=bg_color,
     )
 
-    webview.start(gui=desktop_gui, debug=False)
+    def _on_start():  # type: ignore[no-untyped-def]
+        icon_path = UI_DIR / "BIMOS-500px.png"
+        if icon_path.exists() and hasattr(window, "set_icon") and window is not None:
+            window.set_icon(str(icon_path))
 
-    # Exiting abruptly to bypass QtWebEngine memory cleanup which triggers a Nuitka segfault.
-    # The moment webview window is closed, it returns here.
-    os._exit(0)
+        if sys.platform.startswith("linux"):
+            try:
+                from PyQt6.QtGui import QGuiApplication
+
+                app = QGuiApplication.instance()
+                if app:
+                    app.setDesktopFileName("bimos")  # type: ignore[attr-defined]
+                    app.setApplicationName("BIMOS")
+            except ImportError:
+                pass
+
+    webview.start(gui=desktop_gui, debug=False, func=_on_start)  # type: ignore[arg-type]
+
+    sys.exit(0)

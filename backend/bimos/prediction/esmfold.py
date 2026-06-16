@@ -30,6 +30,13 @@ class ESMFoldPipeline(Pipeline):
         if model.exists():
             return cache_dir
 
+        model_url = getattr(settings, "esm_model_url", None)
+        if not model_url:
+            raise RuntimeError(
+                "ESMFold model URL not configured. "
+                "Set BIMOS_ESM_MODEL_URL or ESM_MODEL_URL in .env"
+            )
+
         self.log(f"Downloading ESMFold model (~8 GB) to {model} ...")
         if shutil.which("aria2c"):
             cmd = [
@@ -42,18 +49,18 @@ class ESMFoldPipeline(Pipeline):
                 str(cache_dir),
                 "-o",
                 "esmfold.model",
-                settings.esm_model_url,
+                model_url,
             ]
         elif shutil.which("wget"):
-            cmd = ["wget", "-O", str(model), settings.esm_model_url]
+            cmd = ["wget", "-O", str(model), model_url]
         else:
-            cmd = ["curl", "-L", "-o", str(model), settings.esm_model_url]
+            cmd = ["curl", "-L", "-o", str(model), model_url]
 
         if container.run(command=cmd, on_output=self.on_output) != 0 or not model.exists():
             raise RuntimeError("Failed to download ESMFold model.")
         return cache_dir
 
-    def run(
+    def run(  # type: ignore[override]
         self,
         fasta_path: str,
         num_recycles: int | None = None,

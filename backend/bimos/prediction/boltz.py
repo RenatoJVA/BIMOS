@@ -17,12 +17,27 @@ from bimos.shared.user_config import resolve
 logger = logging.getLogger("bimos.prediction.boltz")
 
 
+REQUIRED_KEYS = {"recycling_steps", "sampling_steps", "diffusion_samples",
+                 "max_parallel_samples", "num_models", "output_format",
+                 "step_scale", "max_msa_seqs", "num_subsampled_msa",
+                 "num_workers", "preprocessing_threads"}
+
+
 class BoltzPipeline(Pipeline):
     """Protein structure prediction via Boltz-1."""
 
     workspace_subdir = "boltz"
 
+    @staticmethod
+    def _validate_config(cfg: dict[str, Any]) -> None:
+        missing = REQUIRED_KEYS - set(cfg.keys())
+        if missing:
+            raise ValueError(f"Boltz config missing required keys: {missing}")
+        if cfg.get("num_models", 0) < 1:
+            raise ValueError("num_models must be >= 1")
+
     def _build_cli_args(self, yaml_name: str, model_dir: str, cfg: dict[str, Any]) -> list[str]:
+        self._validate_config(cfg)
         args = [
             "boltz",
             "predict",
@@ -66,7 +81,7 @@ class BoltzPipeline(Pipeline):
             args.append("--no_kernels")
         return args
 
-    def run(
+    def run(  # type: ignore[override]
         self,
         fasta_path: str,
         num_models: int = 5,

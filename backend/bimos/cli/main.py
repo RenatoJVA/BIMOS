@@ -38,7 +38,7 @@ click.rich_click.COMMAND_GROUPS = {
         },
         {
             "name": "System & Management",
-            "commands": ["setup", "jobs", "db"],
+            "commands": ["setup", "jobs", "db", "completion"],
         },
     ],
     "main.py": [
@@ -56,13 +56,12 @@ click.rich_click.COMMAND_GROUPS = {
         },
         {
             "name": "System & Management",
-            "commands": ["setup", "jobs", "db"],
+            "commands": ["setup", "jobs", "db", "completion"],
         },
     ]
 }
 
-from bimos.config.settings import settings
-from bimos.infrastructure.job_store import store
+
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -86,8 +85,9 @@ def _print(msg: str) -> None:
 @click.option("--port", default=8000, help="API server port (GUI mode).", hidden=True)
 @click.option("--headless", is_flag=True, help="Run GUI in headless mode (GUI mode).", hidden=True)
 @click.option("--remote", help="URL of a remote BIMOS server to connect to.", hidden=False)
+@click.option("--output-format", "--format", type=click.Choice(["text", "json", "csv"]), default="text", help="Output format for results.")
 @click.pass_context
-def cli(ctx: click.Context, debug: bool, max: bool, gui: bool, manual: bool, host: str, port: int, headless: bool, remote: str) -> None:
+def cli(ctx: click.Context, debug: bool, max: bool, gui: bool, manual: bool, host: str, port: int, headless: bool, remote: str, output_format: str) -> None:
     """
     Welcome to the **BIMOS** command-line interface.
 
@@ -114,10 +114,18 @@ def cli(ctx: click.Context, debug: bool, max: bool, gui: bool, manual: bool, hos
             console.print("[yellow]Ensure the file was included in the build (check build.py).[/yellow]")
         ctx.exit()
 
+    from bimos.config.settings import settings
+    from bimos.infrastructure.job_store import store
+
+    import gc
+    gc.collect()
+
     if debug:
         logging.getLogger("bimos").setLevel(logging.DEBUG)
     settings.max_threads = max
     settings.ensure_dirs()
+    from bimos.cli.utils import set_output_format
+    set_output_format(output_format)
 
     # GUI Mode Execution
     if gui:
@@ -135,27 +143,57 @@ def cli(ctx: click.Context, debug: bool, max: bool, gui: bool, manual: bool, hos
         start_server(host=host, port=port, desktop=not headless, remote_url=remote or settings.remote_url)
         ctx.exit()
 
+    _ensure_commands()
+
     # If no subcommand is provided and gui flag was not set, show help
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
         ctx.exit()
 
 
-# ── Import and Attach Commands ────────────────────────────────────────────────
+def _lazy_register_commands() -> None:
+    from bimos.cli.commands.setup import setup
+    from bimos.cli.commands.predict import predict, predict_boltz
+    from bimos.cli.commands.dock import dock
+    from bimos.cli.commands.workflow import workflow
+    from bimos.cli.commands.qm import qm_orca, qm_g16
+    from bimos.cli.commands.system import jobs, db, completion
 
-from bimos.cli.commands.setup import setup
-from bimos.cli.commands.predict import predict, predict_boltz
-from bimos.cli.commands.dock import dock
-from bimos.cli.commands.workflow import workflow
-from bimos.cli.commands.qm import qm_orca, qm_g16
-from bimos.cli.commands.system import jobs, db
+    cli.add_command(setup)
+    cli.add_command(predict)
+    cli.add_command(predict_boltz)
+    cli.add_command(dock)
+    cli.add_command(workflow)
+    cli.add_command(qm_orca)
+    cli.add_command(qm_g16)
+    cli.add_command(jobs)
+    cli.add_command(db)
+    cli.add_command(completion)
 
-cli.add_command(setup)
-cli.add_command(predict)
-cli.add_command(predict_boltz)
-cli.add_command(dock)
-cli.add_command(workflow)
-cli.add_command(qm_orca)
-cli.add_command(qm_g16)
-cli.add_command(jobs)
-cli.add_command(db)
+
+_cli_commands_registered = False
+
+
+def _ensure_commands() -> None:
+    global _cli_commands_registered
+    if not _cli_commands_registered:
+        _cli_commands_registered = True
+        _lazy_register_commands()
+
+
+_original_resolve = cli.resolve_command
+_original_get_help = cli.get_help
+
+
+def _lazy_resolve(ctx: click.Context, args: list[str]) -> tuple[str | None, click.Command | None, list[str]]:
+    _ensure_commands()
+    return _original_resolve(ctx, args)
+
+
+def _lazy_get_help(ctx: click.Context) -> str:
+    _ensure_commands()
+    return _original_get_help(ctx)
+
+
+cli.resolve_command = _lazy_resolve  # type: ignore[method-assign]
+cli.get_help = _lazy_get_help  # type: ignore[method-assign]
