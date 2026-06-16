@@ -59,11 +59,17 @@ class MolecularDynamicsPipeline(Pipeline):
             stdin_text=stdin
         )
 
-    def _log_has(self, cwd: Path, log_name: str, token: str) -> bool:
-        p = cwd / log_name
-        if not p.exists(): return False
+    @staticmethod
+    def _log_contains(cwd: Path, log_name: str, token: str) -> bool:
+        log_path = cwd / log_name
+        if not log_path.exists():
+            return False
         try:
-            return token in p.read_text(errors="replace")
+            with open(log_path, "r", errors="replace") as f:
+                for chunk in iter(lambda: f.read(8192), ""):
+                    if token in chunk:
+                        return True
+            return False
         except OSError:
             return False
 
@@ -72,12 +78,11 @@ class MolecularDynamicsPipeline(Pipeline):
         if not (cwd / f"min-{comp}.gro").exists() or not (cwd / f"{comp}.top").exists():
             return Stage.PREP
         
-        cg_log = cwd / f"min-cg-{comp}.log"
-        if cg_log.exists() and "did not converge to Fmax" in cg_log.read_text(errors="replace"):
+        if self._log_contains(cwd, f"min-cg-{comp}.log", "did not converge to Fmax"):
             return Stage.MINIMIZATION
 
         for phase in ["nvt", "npt", "sdm"]:
-            if not (cwd / f"{phase}-{comp}.gro").exists() or not self._log_has(cwd, f"{phase}-{comp}.log", "Finished mdrun"):
+            if not (cwd / f"{phase}-{comp}.gro").exists() or not self._log_contains(cwd, f"{phase}-{comp}.log", "Finished mdrun"):
                 return Stage(phase)
 
         if not (cwd / f"{prefix}-{comp}-rmsd.xvg").exists():
@@ -85,16 +90,24 @@ class MolecularDynamicsPipeline(Pipeline):
 
         return Stage.DONE
 
+    EXCLUDED_RESIDUES = {"HOH", "WAT", "NA", "CL", "K", "MG", "CA"}
+
     def _clean_pdb(self, input_pdb: Path, output_pdb: Path) -> None:
-        exclusions = {"HOH", "HETATM", "ANISOU", "CONECT", "NA", "CL"}
-        lines = input_pdb.read_text(errors="replace").splitlines(keepends=True)
-        with open(output_pdb, "w") as f:
-            for line in lines:
-                if not any(line.startswith(ex) or f" {ex} " in line[:12] for ex in exclusions):
-                    f.write(line)
+        with open(input_pdb) as fin, open(output_pdb, "w") as fout:
+            for line in fin:
+                if len(line) < 20:
+                    fout.write(line)
+                    continue
+                record_type = line[0:6].strip()
+                if record_type not in ("ATOM", "HETATM"):
+                    continue
+                res_name = line[17:20].strip()
+                if res_name in self.EXCLUDED_RESIDUES:
+                    continue
+                fout.write(line)
 
     def _fix_histidines(self, input_pdb: Path, output_pdb: Path) -> None:
-        def classify(atom_lines):
+        def classify(atom_lines: list[str]) -> str:
             names = {l[12:16].strip() for l in atom_lines if l.startswith(("ATOM", "HETATM"))}
             if any("HEME" in n for n in names): return "HIS1"
             if "HD1" in names and "HE2" in names: return "HISH"
@@ -147,7 +160,7 @@ class MolecularDynamicsPipeline(Pipeline):
                         new_trr.unlink(missing_ok=True)
 
                 for bak in cwd.glob(f"*#*{tag}*"): bak.unlink(missing_ok=True)
-                converged = not self._log_has(cwd, log_f, "did not converge to Fmax")
+                converged = not self._log_contains(cwd, log_f, "did not converge to Fmax")
                 n += 1
 
     def _run_sim_phase(self, phase: str, prev: str, comp: str, cwd: Path, is_holo: bool) -> None:
@@ -176,14 +189,14 @@ class MolecularDynamicsPipeline(Pipeline):
                 continue
             else: fails = 0
 
-            if (cwd / f"{tag}.gro").exists() and self._log_has(cwd, f"{tag}.log", "Finished mdrun"):
+            if (cwd / f"{tag}.gro").exists() and self._log_contains(cwd, f"{tag}.log", "Finished mdrun"):
                 finished = True
             else:
                 j += 1
                 if j > 50: break
         for bak in cwd.glob("#*#"): bak.unlink(missing_ok=True)
 
-    def run(
+    def run(  # type: ignore[override]
         self,
         pdb_path: str,
         ligand_gro: str | None = None,
@@ -200,6 +213,7 @@ class MolecularDynamicsPipeline(Pipeline):
 
         shutil.copy2(pdb, cwd / f"{pdb.stem}.pdb")
         if is_holo:
+            assert ligand_gro is not None and ligand_itp is not None
             shutil.copy2(ligand_gro, cwd / "ligand.gro")
             shutil.copy2(ligand_itp, cwd / "ligand.itp")
 
@@ -267,11 +281,11 @@ class MolecularDynamicsPipeline(Pipeline):
 
         return {"status": "completed", "output_dir": str(cwd)}
 
-    def _detect_resname(self, gro):
+    def _detect_resname(self, gro: Path) -> str:
         lines = gro.read_text().splitlines()
         return lines[2][5:8].strip()
 
-    def _patch_itp(self, itp):
+    def _patch_itp(self, itp: Path) -> None:
         lines = itp.read_text(errors="replace").splitlines(keepends=True)
         in_block, patched = False, []
         for l in lines:
@@ -282,7 +296,7 @@ class MolecularDynamicsPipeline(Pipeline):
             patched.append(l)
         itp.write_text("".join(patched))
 
-    def _inject_topology(self, top, itp):
+    def _inject_topology(self, top: Path, itp: Path) -> None:
         content = itp.read_text(errors="replace")
         m = re.search(r"\[\s*moleculetype\s*\]\s*\n\s*;?[^\n]*\n\s*(\S+)", content, re.MULTILINE)
         name = m.group(1) if m else "ligand"
@@ -294,7 +308,7 @@ class MolecularDynamicsPipeline(Pipeline):
             t_content = t_content.rstrip() + f"\n{name:<20}1\n"
         top.write_text(t_content)
 
-    def _inject_posres(self, top, name):
+    def _inject_posres(self, top: Path, name: str) -> None:
         content = top.read_text(errors="replace")
         if "POSRES_LIG" not in content:
             block = f"; Strong restraints\n#ifdef POSRES_LIG\n#include \"{name}-posre.itp\"\n#endif\n\n"
@@ -302,20 +316,20 @@ class MolecularDynamicsPipeline(Pipeline):
             content = content.replace(marker, block + marker, 1) if marker in content else content.rstrip() + "\n" + block
             top.write_text(content)
 
-    def _build_complex(self, prot, lig, res, out):
+    def _build_complex(self, prot: Path, lig: Path, res: str, out: Path) -> None:
         p_lines = prot.read_text().splitlines(keepends=True)
         l_lines = [l for l in lig.read_text().splitlines(keepends=True) if res in l]
         n = len(p_lines) - 3 + len(l_lines)
         new = [p_lines[0], f" {n}\n"] + p_lines[2:-1] + l_lines + [p_lines[-1]]
         out.write_text("".join(new))
 
-    def _get_box(self, gro):
+    def _get_box(self, gro: Path) -> list[str]:
         return gro.read_text().splitlines()[-1].split()[:3]
 
     def _default_mdps(self, is_holo: bool) -> dict[str, str]:
         prefix = "holo" if is_holo else "apo"
         path = INFRA_CONFIG_DIR / f"default_{prefix}.yaml"
-        templates: dict = {}
+        templates: dict[str, Any] = {}
         if path.exists():
             with open(path, encoding="utf-8") as handle:
                 templates = yaml.safe_load(handle) or {}

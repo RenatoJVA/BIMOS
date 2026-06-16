@@ -1,0 +1,6 @@
+app_name: "BIMOS"
+app_version: "0.1.0"
+debug: false
+workspace_path: "/tmp/bimos_test_ws"
+cache_path: "/tmp/bimos_test_cache"
+logs_path: "/tmp/bimos_test_logs"

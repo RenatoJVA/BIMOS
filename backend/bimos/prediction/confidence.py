@@ -2,12 +2,12 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 
-def pick_best_esmfold(pred_dir: Path) -> dict | None:
-    """Return the highest-confidence ESMFold result under *pred_dir*."""
-    best: dict | None = None
-    for json_path in pred_dir.rglob("confidence_*.json"):
+def pick_best_esmfold(pred_dir: Path) -> dict[str, Any] | None:
+    best: dict[str, Any] | None = None
+    for json_path in pred_dir.glob("*/confidence_*.json"):
         try:
             with open(json_path, encoding="utf-8") as handle:
                 data = json.load(handle)
@@ -20,10 +20,9 @@ def pick_best_esmfold(pred_dir: Path) -> dict | None:
     return best
 
 
-def pick_best_boltz(pred_root: Path) -> dict | None:
-    """Return the highest-confidence Boltz result under *pred_root*."""
-    best: dict | None = None
-    for json_path in pred_root.rglob("confidence_*.json"):
+def pick_best_boltz(pred_root: Path) -> dict[str, Any] | None:
+    best: dict[str, Any] | None = None
+    for json_path in pred_root.glob("*/confidence_*.json"):
         try:
             with open(json_path, encoding="utf-8") as handle:
                 data = json.load(handle)

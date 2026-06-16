@@ -2,22 +2,21 @@
 System and health endpoints.
 """
 
-import psutil
 import subprocess
 from typing import Optional
 from fastapi import APIRouter, Query, HTTPException
-from bimos.infrastructure.database import search_ligands
 
 router = APIRouter(tags=["System"])
 
 @router.get("/health")
-async def health():
+async def health():  # type: ignore[no-untyped-def]
     return {"status": "ok"}
 
 @router.get("/system/stats")
-async def system_stats():
+async def system_stats():  # type: ignore[no-untyped-def]
     """Get CPU, Memory and GPU statistics."""
-    stats = {
+    import psutil
+    stats: dict[str, object] = {
         "cpu": psutil.cpu_percent(interval=None),
         "memory": psutil.virtual_memory().percent,
         "gpu": None
@@ -40,12 +39,13 @@ async def system_stats():
     return stats
 
 @router.get("/ligands")
-async def list_ligands(
+async def list_ligands(  # type: ignore[no-untyped-def]
     q: str = Query("", description="Search term."),
     source: Optional[str] = Query(None, description="Filter by source."),
     limit: int = Query(50, le=500),
 ):
     """Search the ligand database."""
+    from bimos.infrastructure.database import search_ligands
     try:
         results = search_ligands(query=q, source=source, limit=limit)
         return {

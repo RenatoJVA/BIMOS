@@ -2,10 +2,26 @@
 API utilities for job dispatching and response formatting.
 """
 
+import os
+import re
 import threading
 from typing import Any, Callable
 
 from fastapi import HTTPException
+
+
+SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9_.-]+$")
+
+
+def safe_filename(filename: str | None) -> str:
+    if not filename:
+        raise HTTPException(status_code=422, detail="Filename is required")
+    basename = os.path.basename(filename)
+    if not basename or basename.startswith(".") or "/" in basename:
+        raise HTTPException(status_code=422, detail=f"Invalid filename: {filename}")
+    if not SAFE_NAME_RE.match(basename):
+        raise HTTPException(status_code=422, detail=f"Invalid filename: {filename}")
+    return basename
 
 from bimos.api.schemas import JobResponse
 from bimos.infrastructure.job_store import store, JobRecord, current_job_id
@@ -33,7 +49,7 @@ def get_job_or_404(job_id: str) -> JobRecord:
     return job
 
 
-def dispatch_job(fn: Callable, job_id: str, **kwargs: Any) -> None:
+def dispatch_job(fn: Callable[..., Any], job_id: str, **kwargs: Any) -> None:
     """Run *fn* in a background daemon thread; update job store on completion."""
     max_resources = kwargs.pop("max_resources", False)
 

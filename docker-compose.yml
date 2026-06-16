@@ -1,0 +1,55 @@
+services:
+  bimos-api:
+    build:
+      context: backend
+      dockerfile: Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-bimos}/bimos:${BIMOS_VERSION:-latest}
+    ports:
+      - "8000:8000"
+    environment:
+      BIMOS_WORKSPACE: /workspace
+      BIMOS_CACHE: /cache
+      BIMOS_LOGS: /logs
+      BIMOS_DATABASE_URL: postgresql://bimos:bimos@bimos-db:5432/bimos
+      BIMOS_BASE_PATH: /data
+    volumes:
+      - bimos-workspace:/workspace
+      - bimos-cache:/cache
+      - bimos-logs:/logs
+      - bimos-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: ["serve", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      bimos-db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  bimos-db:
+    image: docker.io/postgres:16-alpine
+    environment:
+      POSTGRES_USER: bimos
+      POSTGRES_PASSWORD: bimos
+      POSTGRES_DB: bimos
+    volumes:
+      - bimos-pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bimos"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  bimos-workspace:
+  bimos-cache:
+  bimos-logs:
+  bimos-data:
+  bimos-pgdata:

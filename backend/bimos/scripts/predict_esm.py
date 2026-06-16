@@ -90,7 +90,7 @@ def main():
         sys.exit(1)
         
     print(f"Loading model on CPU from {model_path}...")
-    model = torch.load(model_path, map_location=torch.device('cpu'), weights_only=False)
+    model = torch.load(model_path, map_location=torch.device('cpu'), weights_only=True)
     model.eval().requires_grad_(False)
     
     # Chunk size management

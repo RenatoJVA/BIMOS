@@ -2,12 +2,12 @@
 Molecular docking endpoints.
 """
 
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, File, Form, UploadFile
 
 from bimos.api.schemas import JobResponse
-from bimos.api.utils import dispatch_job, job_to_response
+from bimos.api.utils import dispatch_job, job_to_response, safe_filename
 from bimos.config.settings import settings
 from bimos.docking import run_docking_pipeline
 from bimos.infrastructure.job_store import store
@@ -16,7 +16,7 @@ router = APIRouter(tags=["Docking"])
 
 
 @router.post("/dock", response_model=JobResponse, status_code=202)
-async def dock_job(
+async def dock_job(  # type: ignore[no-untyped-def]
     protein: UploadFile = File(...),
     ligands: UploadFile = File(...),
     max_resources: bool = Form(False),
@@ -27,15 +27,17 @@ async def dock_job(
     cpu_per_job: Optional[int] = Form(None),
 ):
     """Submit a docking job. Parameters omitted use ``~/.bimos/config/docking.yaml``."""
-    job_dir = settings.workspace_path / "docking" / protein.filename.replace(".pdb", "")
+    safe_protein = safe_filename(protein.filename)
+    safe_ligands = safe_filename(ligands.filename)
+    job_dir = settings.workspace_path / "docking" / safe_protein.replace(".pdb", "")
     job_dir.mkdir(parents=True, exist_ok=True)
 
-    pdb_path = job_dir / protein.filename
-    sdf_path = job_dir / ligands.filename
+    pdb_path = job_dir / safe_protein
+    sdf_path = job_dir / safe_ligands
     pdb_path.write_bytes(await protein.read())
     sdf_path.write_bytes(await ligands.read())
 
-    overrides: dict = {}
+    overrides: dict[str, Any] = {}
     for key, value in {
         "times": times,
         "exhaustiveness": exhaustiveness,
@@ -60,4 +62,4 @@ async def dock_job(
         max_resources=max_resources,
         **overrides,
     )
-    return job_to_response(store.get(job.id))
+    return job_to_response(job)

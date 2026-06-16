@@ -159,7 +159,7 @@ def search_ligands(
         db.close()
 
 
-def get_db():
+def get_db():  # type: ignore[no-untyped-def]
     """FastAPI dependency: yields a database session."""
     db: Session = SessionLocal()
     try:

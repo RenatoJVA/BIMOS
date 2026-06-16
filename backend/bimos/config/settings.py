@@ -65,7 +65,8 @@ def _bootstrap_user_configs() -> None:
             target.write_text(resource.read_text(encoding="utf-8"), encoding="utf-8")
 
 
-if not BIMOS_ENV_FILE.exists():
+def _bootstrap_first_run() -> None:
+    """Create .env and config files on first run. Then reload."""
     BIMOS_BASE.mkdir(parents=True, exist_ok=True)
     BIMOS_ENV_FILE.write_text(_render_env_template(), encoding="utf-8")
     _bootstrap_user_configs()
@@ -85,9 +86,22 @@ if not BIMOS_ENV_FILE.exists():
     print(
         "============================================================", file=sys.stderr
     )
-    sys.exit(0)
 
-load_dotenv(BIMOS_ENV_FILE)
+
+_initialized = False
+
+
+def _ensure_initialized() -> None:
+    global _initialized
+    if _initialized:
+        return
+    if not BIMOS_ENV_FILE.exists():
+        _bootstrap_first_run()
+    load_dotenv(BIMOS_ENV_FILE)
+    _initialized = True
+
+
+_ensure_initialized()
 
 
 class Settings:
@@ -155,7 +169,7 @@ class Settings:
 
     # Database
     database_url: str = os.getenv(
-        "BIMOS_DATABASE_URL", "postgresql://bimos:bimos@localhost/bimos"
+        "BIMOS_DATABASE_URL", ""
     )
 
     # ORCA and Gaussian: defined by host binary path (not containerized)

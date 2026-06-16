@@ -1,6 +1,6 @@
 """
-BIMOS Nuitka Build Script.
-Compiles the application into a standalone CLI/Desktop executable.
+BIMOS Build Script.
+Compiles the application into a standalone executable via Nuitka.
 """
 
 import importlib.util
@@ -17,20 +17,38 @@ def _webview_package_dir() -> Path | None:
     return Path(spec.origin).resolve().parent
 
 
+def _build_frontend() -> None:
+    frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
+    target_ui = Path("bimos") / "ui"
+    if target_ui.exists() and (target_ui / "index.html").exists():
+        return
+    if not frontend_dir.exists():
+        print("Skipping frontend: frontend/ directory not found.")
+        return
+    print("Building frontend...")
+    subprocess.run(["bun", "install"], cwd=str(frontend_dir), check=True)
+    subprocess.run(["bun", "run", "build"], cwd=str(frontend_dir), check=True)
+    dist_dir = frontend_dir / "dist"
+    if dist_dir.exists():
+        target_ui.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["cp", "-r", str(dist_dir) + "/.", str(target_ui)], check=True)
+
+
 def main():
     import os
     import shutil
 
     print("Building BIMOS with Nuitka...")
-    # Ensure frontend UI is present
+
+    # ── Step 1: Ensure frontend UI is built (BD-01: concurrent when possible) ──
+    _build_frontend()
+
     if not (Path("bimos") / "ui" / "index.html").exists():
         print("Error: Frontend UI not found in bimos/ui/")
-        print(
-            "Run 'bun run build' in frontend/ and copy 'dist/' to 'backend/bimos/ui/'"
-        )
+        print("Run 'bun run build' in frontend/ and copy 'dist/' to 'backend/bimos/ui/'")
         sys.exit(1)
 
-    # Clean previous build artifacts to prevent Nuitka AssertionErrors
+    # ── Step 2: Clean previous build artifacts ──
     dist_dir = Path("dist")
     if dist_dir.exists():
         print("Cleaning previous build artifacts...")
@@ -38,6 +56,8 @@ def main():
 
     cores = max(1, int((os.cpu_count() or 1) * 0.5))
     is_windows = platform.system().lower() == "windows"
+    is_macos = platform.system().lower() == "darwin"
+    is_linux = not is_windows and not is_macos
 
     cmd = [
         sys.executable,
@@ -45,6 +65,8 @@ def main():
         "nuitka",
         f"--jobs={cores}",
         "--standalone",
+        # NK-01: Disable bytecode compression for faster startup (Nuitka >= 4.2)
+        # "--onefile-no-compression",
         # Embed the React static files
         "--include-data-dir=bimos/ui=bimos/ui",
         "--include-data-dir=bimos/scripts=bimos/scripts",
@@ -65,16 +87,8 @@ def main():
         "main.py",
     ]
 
-    webview_dir = _webview_package_dir()
-    if webview_dir is not None:
-        js_dir = webview_dir / "js"
-        if js_dir.is_dir():
-            cmd.insert(len(cmd) - 5, f"--include-data-dir={js_dir}=webview/js")
-
+    # ── NK-03: Platform-specific nofollow imports ──
     if is_windows:
-        # Nuitka's pywebview plugin whitelists winforms but omits win32, which
-        # winforms imports. Disabling the plugin lets the import graph bundle
-        # win32/winforms; we exclude unused backends to limit size.
         cmd.insert(len(cmd) - 5, "--disable-plugin=pywebview")
         for unused in (
             "webview.platforms.android",
@@ -88,15 +102,34 @@ def main():
         cmd.insert(len(cmd) - 5, "--include-package=clr_loader")
         cmd.insert(len(cmd) - 5, "--windows-console-mode=attach")
         cmd.insert(len(cmd) - 5, "--no-deployment-flag=excluded-module-usage")
-    else:
-        # Linux / macOS: Qt desktop via pywebview + PyQt6 (plugin handles webview)
+    elif is_macos:
         cmd.insert(len(cmd) - 5, "--include-package=qtpy")
         cmd.insert(len(cmd) - 5, "--enable-plugin=pyqt6")
-        # Avoid name conflict with data-dir bimos/ (on Windows .exe suffix avoids it)
         cmd[cmd.index("--output-filename=bimos")] = "--output-filename=bimos.bin"
+    else:
+        # Linux
+        cmd.insert(len(cmd) - 5, "--include-package=qtpy")
+        cmd.insert(len(cmd) - 5, "--enable-plugin=pyqt6")
+        cmd[cmd.index("--output-filename=bimos")] = "--output-filename=bimos.bin"
+
+    webview_dir = _webview_package_dir()
+    if webview_dir is not None:
+        js_dir = webview_dir / "js"
+        if js_dir.is_dir():
+            cmd.insert(len(cmd) - 5, f"--include-data-dir={js_dir}=webview/js")
 
     print(f"Running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
+
+    # ── NK-02: UPX compression (if available) ──
+    if shutil.which("upx"):
+        dist_bin = dist_dir / "main.dist"
+        if dist_bin.is_dir():
+            print("Compressing with UPX...")
+            for f in dist_bin.rglob("bimos*"):
+                if f.is_file() and f.name.startswith("bimos"):
+                    subprocess.run(["upx", "--best", str(f)], check=False)
+                    break
 
     dist_exe = dist_dir / "main.dist" / "bimos.exe"
     if is_windows and not dist_exe.exists():

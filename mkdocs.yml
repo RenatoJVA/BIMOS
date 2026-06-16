@@ -1,0 +1,67 @@
+site_name: BIMOS
+site_description: Biomolecular Modeling Suite — Documentation
+site_url: https://bimos.ucsm.edu.pe
+repo_url: https://github.com/ucsm/bimos
+repo_name: ucsm/bimos
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - content.code.copy
+    - content.code.annotate
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [backend]
+          options:
+            show_source: true
+            show_root_heading: true
+            show_category_heading: true
+            docstring_style: google
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - CLI Reference: cli.md
+  - API Reference:
+      - Public API: api/public.md
+      - Docking: api/docking.md
+      - Prediction: api/prediction.md
+      - Molecular Dynamics: api/molecular_dynamics.md
+      - Quantum Chemistry: api/quantum_chemistry.md
+      - Infrastructure: api/infrastructure.md
+  - Development: development.md
+  - Contributing: contributing.md

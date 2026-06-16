@@ -5,7 +5,7 @@ from bimos.infrastructure.job_store import store
 @click.group("jobs", invoke_without_command=True)
 @click.option("--logs", "-l", default=None, help="Show logs for a specific job ID.")
 @click.pass_context
-def jobs(ctx, logs: str) -> None:
+def jobs(ctx, logs: str) -> None:  # type: ignore[no-untyped-def]
     """List tracked jobs, show logs, or manage jobs."""
     if ctx.invoked_subcommand is not None:
         return
@@ -82,8 +82,8 @@ def db_query(query: str, dataset: str) -> None:
 
     if dataset:
         from bimos.infrastructure.chembl_db import search_candidates
-        results = search_candidates(dataset, query)
-        if not results:
+        candidates = search_candidates(dataset, query)
+        if not candidates:
             console.print(f"[yellow]No results found in '{dataset}' for '{query}'.[/yellow]")
             return
         
@@ -94,18 +94,18 @@ def db_query(query: str, dataset: str) -> None:
         table.add_column("LogP", justify="right")
         table.add_column("DrugLikeness", justify="right")
 
-        for lig in results:
-            name = str(lig.get("pref_name") or lig.get("chembl_id"))
-            mw = f"{lig.get('peso_mol') or 0:.2f}"
-            logp = f"{lig.get('alogp') or 0:.2f}"
-            dl = f"{lig.get('drug_likeness') or 0:.2f}"
-            table.add_row(name[:30], str(lig.get("chembl_id", "")), mw, logp, dl)
+        for cand in candidates:
+            name = str(cand.get("pref_name") or cand.get("chembl_id"))
+            mw = f"{cand.get('peso_mol') or 0:.2f}"
+            logp = f"{cand.get('alogp') or 0:.2f}"
+            dl = f"{cand.get('drug_likeness') or 0:.2f}"
+            table.add_row(name[:30], str(cand.get("chembl_id", "")), mw, logp, dl)
             
         console.print(table)
     else:
         from bimos.infrastructure.database import search_ligands
-        results = search_ligands(query)
-        if not results:
+        ligands = search_ligands(query)
+        if not ligands:
             console.print(f"[yellow]No ligands found matching '{query}'.[/yellow]")
             return
             
@@ -116,7 +116,7 @@ def db_query(query: str, dataset: str) -> None:
         table.add_column("MW", justify="right")
         table.add_column("Source", style="dim")
 
-        for lig in results:
+        for lig in ligands:
             table.add_row(
                 str(lig.name)[:30], 
                 str(lig.cid), 
@@ -147,3 +147,14 @@ def db_export(dataset: str, output: str) -> None:
         console.print(f"[bold green]✓ Successfully exported {count} compounds.[/bold green]")
     except Exception as e:
         console.print(f"[bold red]Error exporting dataset:[/bold red] {e}")
+
+@click.command("completion")
+@click.argument("shell", type=click.Choice(["bash", "zsh", "fish"]))
+def completion(shell: str) -> None:
+    """Print shell completion script. Source with: eval $(bimos completion bash)"""
+    from bimos.cli.main import cli
+    from click.shell_completion import BashComplete, ZshComplete, FishComplete
+
+    mapping = {"bash": BashComplete, "zsh": ZshComplete, "fish": FishComplete}
+    comp = mapping[shell](cli, ctx_args={}, prog_name="bimos", complete_var="_BIMOS_COMPLETE")
+    click.echo(comp.source())

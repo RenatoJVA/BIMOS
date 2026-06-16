@@ -13,7 +13,7 @@ _PROCESS_NAMES = ("docking", "md", "esmfold", "boltz", "orca", "gaussian")
 
 
 @router.get("/profiles")
-async def list_config_profiles(preview_max: bool = Query(False)):
+async def list_config_profiles(preview_max: bool = Query(False)):  # type: ignore[no-untyped-def]
     """Return config file paths and active profile per process."""
     settings.ensure_dirs()
     ensure_user_configs()

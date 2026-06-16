@@ -175,7 +175,7 @@ class DockingPipeline(Pipeline):
                         continue
         return None
 
-    def run(self, protein_pdb: str, ligands_sdf: str) -> dict[str, Any]:
+    def run(self, protein_pdb: str, ligands_sdf: str) -> dict[str, Any]:  # type: ignore[override]
         protein_path = Path(protein_pdb).resolve()
         ligands_path = Path(ligands_sdf).resolve()
         if not protein_path.exists():

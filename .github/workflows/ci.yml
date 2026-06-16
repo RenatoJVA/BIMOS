@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff mypy bandit
+      - run: ruff check bimos/
+      - run: mypy bimos/ --strict || true
+      - run: bandit -r bimos/ -ll -x bimos/ui
+
+  unit:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "${{ matrix.python-version }}"
+      - run: pip install -e ".[dev]"
+      - run: pip install pytest-cov pytest-mock httpx
+      - run: pytest tests/unit/ -v --cov=bimos --cov-report=xml --cov-fail-under=80
+      - uses: codecov/codecov-action@v4
+
+  integration:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: pip install pytest-cov httpx
+      - run: pytest tests/integration/ -v --cov=bimos --cov-append --cov-report=xml
+
+  security:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install bandit
+      - run: bandit -r bimos/ -ll
+      - run: pytest tests/security/ -v -m security
+
+  e2e:
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install -e ".[dev]"
+      - run: pytest tests/e2e/ -v --timeout=600 -m e2e
+
+  coverage:
+    runs-on: ubuntu-24.04
+    needs: [unit, integration]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: pip install pytest-cov
+      - run: pytest tests/unit/ tests/integration/ --cov=bimos --cov-report=html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: backend/htmlcov/
