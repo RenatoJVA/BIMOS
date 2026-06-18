@@ -25,21 +25,21 @@ def test_settings_host_port() -> None:
 
 
 def test_settings_get_threads_default(monkeypatch) -> None:
-    monkeypatch.setattr("bimos.config.settings.os.cpu_count", lambda: 12)
+    monkeypatch.setattr("bimos.config.settings.Settings._physical_core_count", lambda _: 12)
     s = Settings()
     s.max_threads = False
     assert s.get_threads() == 4
 
 
 def test_settings_get_threads_max(monkeypatch) -> None:
-    monkeypatch.setattr("bimos.config.settings.os.cpu_count", lambda: 12)
+    monkeypatch.setattr("bimos.config.settings.Settings._physical_core_count", lambda _: 12)
     s = Settings()
     s.max_threads = True
     assert s.get_threads() == 12
 
 
 def test_settings_get_threads_single_cpu(monkeypatch) -> None:
-    monkeypatch.setattr("bimos.config.settings.os.cpu_count", lambda: 1)
+    monkeypatch.setattr("bimos.config.settings.Settings._physical_core_count", lambda _: 1)
     s = Settings()
     s.max_threads = False
     assert s.get_threads() == 1

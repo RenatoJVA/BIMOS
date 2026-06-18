@@ -87,3 +87,15 @@ site/
 .idea/
 *.swp
 *.swo
+
+# Test outputs (keep test data, ignore generated artifacts)
+test/**/output/
+test/logs/
+test/PREDICT/esm_output/
+test/PREDICT/boltz_output/
+test/QM/orca/*
+test/QM/g16/*
+test/PREDICT/*
+Manuscript/
+DOCS/
+AGENTS.md

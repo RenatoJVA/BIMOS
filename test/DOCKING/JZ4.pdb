@@ -1,14 +1,45 @@
-REMARK 800 SITE_DESCRIPTION: BINDING SITE FOR RESIDUE JZ4 A 167                 
-HET    JZ4  A 167      10                                                       
-HETNAM     JZ4 2-PROPYLPHENOL                                                   
-FORMUL   4  JZ4    C9 H12 O                                                     
-HETATM 1376  C4  JZ4 A 167      24.294 -24.124  -0.071  1.00 16.39           C  
-HETATM 1377  C7  JZ4 A 167      21.553 -27.214  -4.112  1.00 16.92           C  
-HETATM 1378  C8  JZ4 A 167      22.068 -26.747  -5.331  1.00 14.84           C  
-HETATM 1379  C9  JZ4 A 167      22.671 -25.512  -5.448  1.00 15.93           C  
-HETATM 1380  C10 JZ4 A 167      22.769 -24.730  -4.295  1.00 15.43           C  
-HETATM 1381  C11 JZ4 A 167      21.693 -26.459  -2.954  1.00 16.72           C  
-HETATM 1382  C12 JZ4 A 167      22.294 -25.187  -3.075  1.00 14.13           C  
-HETATM 1383  C13 JZ4 A 167      22.463 -24.414  -1.808  1.00 15.94           C  
-HETATM 1384  C14 JZ4 A 167      23.925 -24.704  -1.394  1.00 15.28           C  
-HETATM 1385  OAB JZ4 A 167      23.412 -23.536  -4.342  1.00 13.88           O  
+HETATM    1  C4  JZ4 A 167      24.294 -24.124  -0.071  1.00 16.39           C
+HETATM    2  C7  JZ4 A 167      21.553 -27.214  -4.112  1.00 16.92           C
+HETATM    3  C8  JZ4 A 167      22.068 -26.747  -5.331  1.00 14.84           C
+HETATM    4  C9  JZ4 A 167      22.671 -25.512  -5.448  1.00 15.93           C
+HETATM    5  C10 JZ4 A 167      22.769 -24.730  -4.295  1.00 15.43           C
+HETATM    6  C11 JZ4 A 167      21.693 -26.459  -2.954  1.00 16.72           C
+HETATM    7  C12 JZ4 A 167      22.294 -25.187  -3.075  1.00 14.13           C
+HETATM    8  C13 JZ4 A 167      22.463 -24.414  -1.808  1.00 15.94           C
+HETATM    9  C14 JZ4 A 167      23.925 -24.704  -1.394  1.00 15.28           C
+HETATM   10  OAB JZ4 A 167      23.412 -23.536  -4.342  1.00 13.88           O
+HETATM   11  H7  JZ4 A 167      21.045 -28.166  -4.074  1.00  0.00           H
+HETATM   12  H8  JZ4 A 167      21.990 -27.375  -6.206  1.00  0.00           H
+HETATM   13  H9  JZ4 A 167      23.053 -25.163  -6.396  1.00  0.00           H
+HETATM   14  H11 JZ4 A 167      21.355 -26.831  -1.998  1.00  0.00           H
+HETATM   15 H132 JZ4 A 167      22.312 -23.348  -1.980  1.00  0.00           H
+HETATM   16 H133 JZ4 A 167      21.773 -24.778  -1.046  1.00  0.00           H
+HETATM   17 H142 JZ4 A 167      24.063 -25.784  -1.348  1.00  0.00           H
+HETATM   18 H143 JZ4 A 167      24.592 -24.297  -2.154  1.00  0.00           H
+HETATM   19  HAB JZ4 A 167      22.822 -22.843  -4.037  1.00  0.00           H
+HETATM   20  H41 JZ4 A 167      25.332 -24.366   0.156  1.00  0.00           H
+HETATM   21  H42 JZ4 A 167      24.172 -23.041  -0.103  1.00  0.00           H
+HETATM   22  H43 JZ4 A 167      23.647 -24.540   0.701  1.00  0.00           H
+CONECT    5    4    7   10
+CONECT    6    7    2   14
+CONECT    7    5    6    8
+CONECT    8    7    9   15   16
+CONECT    9    1    8   17   18
+CONECT    1    9   20   21   22
+CONECT    2    6    3   11
+CONECT    3    4    2   12
+CONECT    4    5    3   13
+CONECT   14    6
+CONECT   15    8
+CONECT   16    8
+CONECT   17    9
+CONECT   18    9
+CONECT   20    1
+CONECT   21    1
+CONECT   22    1
+CONECT   11    2
+CONECT   12    3
+CONECT   13    4
+CONECT   19   10
+CONECT   10    5   19
+END

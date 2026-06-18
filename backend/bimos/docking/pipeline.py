@@ -115,7 +115,14 @@ class DockingPipeline(Pipeline):
             return pdbqt_path
 
         rc = self._container_run(
-            ["mk_prepare_receptor.py", "--read_pdb", pdb_path.name, "-p", pdbqt_path.name],
+            [
+                "python3",
+                "/scripts/prepare_receptor.py",
+                "--input",
+                pdb_path.name,
+                "--output",
+                pdbqt_path.name,
+            ],
             work_dir=pdb_path.parent,
         )
         if rc != 0 or not pdbqt_path.exists():

@@ -1,5 +1,5 @@
 # BIMOS Global Dockerfile
-# Consolidates ESMFold, Vina, and GROMACS into a single image.
+# Consolidates Vina, GROMACS, and Boltz-1 into a single image.
 
 #################################################################
 # Stage 1: GROMACS Builder
@@ -71,7 +71,7 @@ RUN echo "source /usr/local/gromacs/bin/GMXRC" >> /etc/bash.bashrc
 RUN pip3 install --break-system-packages --no-cache-dir \
     rdkit \
     numpy \
-    gemmi \
+    # gemmi \
     scipy \
     tomli \
     tqdm \
@@ -80,24 +80,15 @@ RUN pip3 install --break-system-packages --no-cache-dir \
     biopython \
     git+https://github.com/forlilab/meeko
 
-# Install PyTorch (CPU-only to avoid massive image size, can be swapped for GPU)
+# Install PyTorch with CUDA (for GPU-accelerated predictions: Boltz)
 RUN pip3 install --break-system-packages --no-cache-dir \
-    torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+    torch torchvision torchaudio
 
-# Install ESM and OpenFold dependencies
-RUN pip3 install --break-system-packages --no-cache-dir \
-    omegaconf \
-    pytorch_lightning \
-    ml_collections \
-    einops \
-    modelcif \
-    pyyaml \
-    dm-tree \
-    git+https://github.com/NVIDIA/dllogger.git
-
-# Install OpenFold and ESM (simplified)
-RUN pip3 install --break-system-packages --no-cache-dir --no-build-isolation git+https://github.com/sokrypton/openfold.git
-RUN pip3 install --break-system-packages --no-cache-dir --no-build-isolation git+https://github.com/sokrypton/esm.git
+# Install Boltz from GitHub (CUDA-enabled)
+RUN git clone --depth 1 https://github.com/jwohlwend/boltz.git /opt/boltz && \
+    cd /opt/boltz && \
+    pip3 install --break-system-packages --no-cache-dir .[cuda] && \
+    rm -rf /opt/boltz
 
 # Set up directories
 RUN mkdir -p /models /workspace /data /results

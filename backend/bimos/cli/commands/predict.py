@@ -3,16 +3,16 @@ import rich_click as click
 from bimos.infrastructure.job_store import store
 
 @click.command("predict")
-@click.argument("fasta_file", type=click.Path(exists=True))
+@click.argument("input_file", type=click.Path(exists=True))
 @click.option("--output", "-o", default=None, help="Output directory.")
 @click.option("--recycles", default=3, show_default=True, help="ESMFold recycle count.")
 @click.option("--background", "-b", is_flag=True, help="Run in background thread.")
 @click.option("--gui", "-g", is_flag=True, help="Open the GUI dashboard for monitoring.")
-def predict(fasta_file: str, output: str, recycles: int, background: bool, gui: bool) -> None:
-    """Predict protein structure from a FASTA file using ESMFold."""
+def predict(input_file: str, output: str, recycles: int, background: bool, gui: bool) -> None:
+    """Predict protein structure from a FASTA or YAML file using ESMFold."""
     from bimos.prediction import predict_structure
 
-    job = store.create(kind="predict", meta={"fasta": fasta_file}, output_dir=output or "")
+    job = store.create(kind="predict", meta={"fasta": input_file}, output_dir=output or "")
     click.echo(f"Job ID: {job.id}")
 
     def _run() -> None:
@@ -25,7 +25,7 @@ def predict(fasta_file: str, output: str, recycles: int, background: bool, gui: 
 
         try:
             result = predict_structure(
-                fasta_path=fasta_file,
+                fasta_path=input_file,
                 output_dir=output,
                 num_recycles=recycles,
                 on_output=emit,
@@ -57,16 +57,16 @@ def predict(fasta_file: str, output: str, recycles: int, background: bool, gui: 
 
 
 @click.command("predict-boltz")
-@click.argument("fasta_file", type=click.Path(exists=True))
+@click.argument("input_file", type=click.Path(exists=True))
 @click.option("--output", "-o", default=None, help="Output directory.")
 @click.option("--models", "-n", default=5, show_default=True, help="Number of Boltz models to run.")
 @click.option("--background", "-b", is_flag=True, help="Run in background thread.")
 @click.option("--gui", "-g", is_flag=True, help="Open the GUI dashboard for monitoring.")
-def predict_boltz(fasta_file: str, output: str, models: int, background: bool, gui: bool) -> None:
-    """Predict protein structure from a FASTA file using Boltz-1."""
+def predict_boltz(input_file: str, output: str, models: int, background: bool, gui: bool) -> None:
+    """Predict protein structure from a YAML or FASTA file using Boltz-1."""
     from bimos.prediction import predict_boltz
 
-    job = store.create(kind="predict-boltz", meta={"fasta": fasta_file}, output_dir=output or "")
+    job = store.create(kind="predict-boltz", meta={"fasta": input_file}, output_dir=output or "")
     click.echo(f"Job ID: {job.id}")
 
     def _run() -> None:
@@ -79,7 +79,7 @@ def predict_boltz(fasta_file: str, output: str, models: int, background: bool, g
 
         try:
             result = predict_boltz(
-                fasta_path=fasta_file,
+                fasta_path=input_file,
                 output_dir=output,
                 num_models=models,
                 on_output=emit,

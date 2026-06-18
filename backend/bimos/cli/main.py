@@ -197,3 +197,6 @@ def _lazy_get_help(ctx: click.Context) -> str:
 
 cli.resolve_command = _lazy_resolve  # type: ignore[method-assign]
 cli.get_help = _lazy_get_help  # type: ignore[method-assign]
+
+if __name__ == "__main__":
+    cli()

@@ -10,7 +10,7 @@ from typing import Any
 from bimos.config.settings import settings
 from bimos.infrastructure import container
 from bimos.prediction.confidence import pick_best_boltz
-from bimos.prediction.fasta import write_boltz_yaml
+from bimos.prediction.fasta import ensure_yaml
 from bimos.shared.pipeline import Pipeline
 from bimos.shared.user_config import resolve
 
@@ -87,12 +87,11 @@ class BoltzPipeline(Pipeline):
         num_models: int = 5,
         max_mode: bool | None = None,
     ) -> dict[str, Any]:
-        fasta = Path(fasta_path).resolve()
-        job_dir = self.output_dir / fasta.stem
+        input_path = Path(fasta_path).resolve()
+        job_dir = self.output_dir / input_path.stem
         job_dir.mkdir(parents=True, exist_ok=True)
 
-        yaml_path = job_dir / f"{fasta.stem}.yaml"
-        write_boltz_yaml(fasta, yaml_path)
+        yaml_path = ensure_yaml(input_path, job_dir)
 
         pred_dir = job_dir / "predictions"
         pred_dir.mkdir(exist_ok=True)
@@ -123,8 +122,8 @@ class BoltzPipeline(Pipeline):
         if not best:
             raise RuntimeError("No valid Boltz output.")
 
-        dest_struct = job_dir / f"{fasta.stem}_best{best['struct_path'].suffix}"
-        dest_json = job_dir / f"{fasta.stem}_best_conf.json"
+        dest_struct = job_dir / f"{input_path.stem}_best{best['struct_path'].suffix}"
+        dest_json = job_dir / f"{input_path.stem}_best_conf.json"
         shutil.copy2(best["struct_path"], dest_struct)
         shutil.copy2(best["json_path"], dest_json)
         self.log(f"Best model selected. Score: {best['score']:.4f}")
