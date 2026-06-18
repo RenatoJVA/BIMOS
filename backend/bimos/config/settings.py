@@ -149,9 +149,24 @@ class Settings:
     ssh_user: str = os.getenv("BIMOS_SSH_USER", "")
     ssh_key: str = os.getenv("BIMOS_SSH_KEY", "")
 
+    @staticmethod
+    def _physical_core_count() -> int:
+        """Count physical CPU cores (not hyperthreads)."""
+        try:
+            cores: set[str] = set()
+            for cpu_path in Path("/sys/devices/system/cpu").glob("cpu[0-9]*"):
+                core_file = cpu_path / "topology" / "core_id"
+                if core_file.exists():
+                    cores.add(core_file.read_text().strip())
+            if cores:
+                return len(cores)
+        except OSError:
+            pass
+        return os.cpu_count() or 1
+
     def get_threads(self) -> int:
         """Calculate number of threads based on max_threads flag."""
-        total = os.cpu_count() or 1
+        total = self._physical_core_count()
         if self.max_threads:
             return total
         return max(1, total // 3)

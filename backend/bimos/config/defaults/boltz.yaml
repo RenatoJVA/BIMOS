@@ -1,3 +1,4 @@
+num_models: 5
 recycling_steps: 10
 sampling_steps: 200
 diffusion_samples: 50

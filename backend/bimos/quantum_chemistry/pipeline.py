@@ -107,6 +107,8 @@ class OrcaPipeline(QMPipeline):
             env["PATH"] = f"{orca_dir}:{env.get('PATH', '')}"
             env["LD_LIBRARY_PATH"] = f"{orca_dir}:{env.get('LD_LIBRARY_PATH', '')}"
             env["OMP_NUM_THREADS"] = str(cfg.nprocs)
+            env["OMPI_MCA_opal_hwthread_slots_as_cpus"] = "1"
+            env["OMPI_MCA_hwloc_base_binding_policy"] = "none"
 
             while len([item for item in processes if item[0].poll() is None]) >= cfg.max_jobs:
                 time.sleep(1)

@@ -10,7 +10,7 @@ from typing import Any, Callable
 from bimos.config.settings import settings
 from bimos.infrastructure import container
 from bimos.prediction.confidence import pick_best_esmfold
-from bimos.prediction.fasta import write_boltz_yaml
+from bimos.prediction.fasta import ensure_yaml, read_yaml_sequences
 from bimos.shared.paths import SCRIPTS_DIR
 from bimos.shared.pipeline import Pipeline
 from bimos.shared.user_config import resolve
@@ -71,12 +71,12 @@ class ESMFoldPipeline(Pipeline):
             num_recycles = int(cfg.get("prediction", {}).get("num_recycles", 3))
         self.log(f"ESMFold profile: {profile.value}")
 
-        fasta = Path(fasta_path).resolve()
-        job_dir = self.output_dir / fasta.stem
+        input_path = Path(fasta_path).resolve()
+        job_dir = self.output_dir / input_path.stem
         job_dir.mkdir(parents=True, exist_ok=True)
 
-        yaml_path = job_dir / f"{fasta.stem}.yaml"
-        write_boltz_yaml(fasta, yaml_path)
+        yaml_path = ensure_yaml(input_path, job_dir)
+        seqs = read_yaml_sequences(yaml_path)
         cache_dir = self._ensure_model()
 
         pred_dir = job_dir / "predictions"
@@ -96,7 +96,7 @@ class ESMFoldPipeline(Pipeline):
             str(num_recycles),
         ]
 
-        self.log(f"Starting ESMFold prediction for {fasta.name}")
+        self.log(f"Starting ESMFold prediction for {input_path.name}")
         rc = container.run(
             command=cmd,
             image=settings.bimos_image,
@@ -111,7 +111,7 @@ class ESMFoldPipeline(Pipeline):
         if not best:
             raise RuntimeError("No valid ESMFold output.")
 
-        dest_pdb = job_dir / f"{fasta.stem}_best.pdb"
+        dest_pdb = job_dir / f"{input_path.stem}_best.pdb"
         shutil.copy(best["pdb_path"], dest_pdb)
         self.log(f"Prediction complete. Confidence: {best['score']:.4f}")
         return {
