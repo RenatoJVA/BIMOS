@@ -2,11 +2,12 @@
 
   # BIMOS
 
-  **Biomolecular Modeling Suite**
+  **Biomolecular Modeling Suite** — *v0.1.0 (beta)*
 
   [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
   [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
   [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macOS%20%7C%20Windows-lightgrey)]()
+  [![Status](https://img.shields.io/badge/status-development-yellow)]()
 
   A modern, high-performance toolkit unifying structural biology and quantum chemistry pipelines — from structure prediction and molecular dynamics to virtual screening and QM charge refinement.
 
