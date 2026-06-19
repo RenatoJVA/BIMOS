@@ -96,6 +96,14 @@ test/PREDICT/boltz_output/
 test/QM/orca/*
 test/QM/g16/*
 test/PREDICT/*
+
+# Project docs (internal use, not for public repo)
 Manuscript/
 DOCS/
+docs/
+
 AGENTS.md
+
+# UI build artifacts (regenerated via frontend build)
+backend/ui/assets/
+backend/bimos/ui/assets/
