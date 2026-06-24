@@ -104,6 +104,9 @@ docs/
 
 AGENTS.md
 
+# License generator (seller-side only, not for distribution)
+tools/
+
 # UI build artifacts (regenerated via frontend build)
 backend/ui/assets/
 backend/bimos/ui/assets/

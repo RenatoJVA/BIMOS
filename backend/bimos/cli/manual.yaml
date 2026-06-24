@@ -43,7 +43,15 @@ manual:
         * **ORCA Pipeline**: `bimos qm-orca ./ligands_dir -j 4 --charge 0`
         * **Gaussian 16**: `bimos qm-g16 ./ligands_dir -j 4 --charge 1`
 
-    - title: "## 6. Troubleshooting"
+    - title: "## 6. License Management"
+      content: |
+        BIMOS requires a license file to run computational pipelines.
+        * **Show status**: `bimos key`
+        * **Activate**: Drop the `bimos_*.lic` file into `~/.bimos/` and run `bimos key`
+        * **Machine fingerprint**: Shown by `bimos key` — send this to your vendor
+        * **License types**: PERMANENT (no expiry) or date-bound (e.g. `2027-12-31`)
+
+    - title: "## 7. Troubleshooting"
       content: |
         * **White Screen GUI**: Check `~/.bimos/.env`. If `BIMOS_REMOTE_URL` is set to an unreachable IP, the UI will stall. Comment it out for local mode.
         * **View Logs**: `bimos jobs -l <JOB_ID>`

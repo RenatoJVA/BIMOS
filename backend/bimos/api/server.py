@@ -38,6 +38,23 @@ async def get_system_theme():  # type: ignore[no-untyped-def]
     return {"theme": "dark" if is_dark else "light"}
 
 
+@app.get("/api/v1/system/license")
+async def get_license_status():  # type: ignore[no-untyped-def]
+    """Return the current license status for the frontend badge."""
+    from bimos.shared.license import _read_obfuscated, validate_key
+    stored = _read_obfuscated()
+    if stored is None:
+        return {"status": "unlicensed", "type": None}
+    valid, msg = validate_key(stored)
+    parts = stored.split("|")
+    lic_type = parts[1] if len(parts) >= 3 else None
+    return {
+        "status": "active" if valid else "invalid",
+        "type": lic_type,
+        "message": msg,
+    }
+
+
 # Resolve path to UI assets (works natively and inside Nuitka)
 BASE_DIR = Path(__file__).resolve().parent.parent
 UI_DIR = BASE_DIR / "ui"

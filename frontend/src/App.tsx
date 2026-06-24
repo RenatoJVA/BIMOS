@@ -31,6 +31,7 @@ function App() {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [systemTheme, setSystemTheme] = useState<'light' | 'dark' | null>(null);
   const [maxResources, setMaxResources] = useState(false);
+  const [licenseStatus, setLicenseStatus] = useState<{status: string; type: string | null; message: string} | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -61,6 +62,18 @@ function App() {
     const root = document.documentElement;
     root.setAttribute('data-theme', systemTheme || 'light');
   }, [systemTheme]);
+
+  useEffect(() => {
+    const pollLicense = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/system/license`);
+        if (res.ok) setLicenseStatus(await res.json());
+      } catch { /* ignore */ }
+    };
+    pollLicense();
+    const interval = setInterval(pollLicense, 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -116,10 +129,27 @@ function App() {
             <p className="text-text-secondary text-base font-mono tracking-widest uppercase opacity-80">
               Biomolecular Modeling Suite • Live Job Monitor
             </p>
+            {licenseStatus && (
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  licenseStatus.status === 'active' ? 'bg-success' : 'bg-danger'
+                }`} />
+                <span className={`text-xs font-mono ${
+                  licenseStatus.status === 'active' ? 'text-text-secondary' : 'text-danger'
+                }`}>
+                  {licenseStatus.status === 'active'
+                    ? licenseStatus.type === 'PERMANENT'
+                      ? 'Permanent License'
+                      : `License valid until ${licenseStatus.type}`
+                    : licenseStatus.status === 'invalid'
+                      ? 'License expired'
+                      : 'Unlicensed — place .lic in ~/.bimos/'}
+                </span>
+              </div>
+            )}
           </div>
           <SystemMonitor apiBase={API_BASE} />
         </header>
-
         <main>
           <FlowLauncher
             apiBase={API_BASE}

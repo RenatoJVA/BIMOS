@@ -38,7 +38,7 @@ click.rich_click.COMMAND_GROUPS = {
         },
         {
             "name": "System & Management",
-            "commands": ["setup", "jobs", "db", "completion"],
+            "commands": ["setup", "jobs", "db", "completion", "key"],
         },
     ],
     "main.py": [
@@ -56,7 +56,7 @@ click.rich_click.COMMAND_GROUPS = {
         },
         {
             "name": "System & Management",
-            "commands": ["setup", "jobs", "db", "completion"],
+            "commands": ["setup", "jobs", "db", "completion", "key"],
         },
     ]
 }
@@ -145,6 +145,14 @@ def cli(ctx: click.Context, debug: bool, max: bool, gui: bool, manual: bool, hos
 
     _ensure_commands()
 
+    # License check — skip for key, setup, completion, version
+    if ctx.invoked_subcommand not in ("key", "setup", "completion", None):
+        from bimos.shared.license import is_licensed
+        ok, msg = is_licensed()
+        if not ok:
+            click.echo(f"[ERROR] {msg}")
+            ctx.exit(1)
+
     # If no subcommand is provided and gui flag was not set, show help
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
@@ -169,6 +177,10 @@ def _lazy_register_commands() -> None:
     cli.add_command(jobs)
     cli.add_command(db)
     cli.add_command(completion)
+
+    # License management
+    from bimos.cli.commands.license import key as key_cmd
+    cli.add_command(key_cmd)
 
 
 _cli_commands_registered = False
