@@ -5,11 +5,10 @@ User configuration endpoints.
 from fastapi import APIRouter, Query
 
 from bimos.config.settings import settings
+from bimos.shared.paths import PROCESS_CONFIG_FILES
 from bimos.shared.user_config import ensure_user_configs, is_custom, resolve, user_config_dir
 
 router = APIRouter(prefix="/config", tags=["Configuration"])
-
-_PROCESS_NAMES = ("docking", "md", "esmfold", "boltz", "orca", "gaussian")
 
 
 @router.get("/profiles")
@@ -18,7 +17,7 @@ async def list_config_profiles(preview_max: bool = Query(False)):  # type: ignor
     settings.ensure_dirs()
     ensure_user_configs()
     processes = {}
-    for name in _PROCESS_NAMES:
+    for name in PROCESS_CONFIG_FILES:
         _, profile = resolve(name, max_mode=preview_max)
         processes[name] = {
             "profile": profile.value,

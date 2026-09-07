@@ -6,7 +6,7 @@ A lightweight, responsive desktop interface for monitoring and managing BIMOS co
 
 ## Overview
 
-BIMOS is primarily a **CLI-first** engine. This frontend provides a premium graphical dashboard for tracking long-running scientific jobs (ESMFold structure prediction, Vina docking, GROMACS MD, QM pipelines).
+BIMOS is primarily a **CLI-first** engine. This frontend provides a premium graphical dashboard for tracking long-running scientific jobs (Boltz structure prediction, Vina docking, GROMACS MD, QM pipelines).
 
 ## Tech Stack
 

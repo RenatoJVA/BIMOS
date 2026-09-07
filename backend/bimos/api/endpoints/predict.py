@@ -6,18 +6,18 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from bimos.api.schemas import JobResponse, PredictBoltzRequest, PredictRequest
+from bimos.api.schemas import JobResponse, PredictBoltzRequest
 from bimos.api.utils import dispatch_job, job_to_response, safe_filename
 from bimos.config.settings import settings
 from bimos.infrastructure.job_store import store
-from bimos.prediction import predict_boltz, predict_structure
+from bimos.prediction import predict_boltz
 
 router = APIRouter(tags=["Prediction"])
 
 
 @router.post("/predict", response_model=JobResponse, status_code=202)
-async def predict_esm(req: PredictRequest):  # type: ignore[no-untyped-def]
-    """Submit an ESMFold prediction job."""
+async def predict_job(req: PredictBoltzRequest):  # type: ignore[no-untyped-def]
+    """Submit a structure prediction job using Boltz-1."""
     safe_name = safe_filename(req.name)
     job_dir = settings.workspace_path / "predict" / safe_name
     job_dir.mkdir(parents=True, exist_ok=True)
@@ -34,10 +34,10 @@ async def predict_esm(req: PredictRequest):  # type: ignore[no-untyped-def]
         "fasta_path": str(fasta_path),
         "max_resources": req.max_resources,
     }
-    if req.num_recycles is not None:
-        kwargs["num_recycles"] = req.num_recycles
+    if req.num_models is not None:
+        kwargs["num_models"] = req.num_models
 
-    dispatch_job(predict_structure, job.id, **kwargs)
+    dispatch_job(predict_boltz, job.id, **kwargs)
     return job_to_response(job)
 
 

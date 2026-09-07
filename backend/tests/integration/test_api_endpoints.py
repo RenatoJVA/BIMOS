@@ -217,7 +217,7 @@ def test_jobs_list_with_mocked_store(client: TestClient) -> None:
         assert response.json() == []
 
 
-def test_predict_endpoint_with_recycles(client: TestClient, tmp_path: Path, monkeypatch) -> None:
+def test_predict_endpoint_with_num_models(client: TestClient, tmp_path: Path, monkeypatch) -> None:
     from bimos.config.settings import settings as bimos_settings
     monkeypatch.setattr(bimos_settings, "workspace_path", tmp_path)
     fake_store = MagicMock()
@@ -242,7 +242,7 @@ def test_predict_endpoint_with_recycles(client: TestClient, tmp_path: Path, monk
                 json={
                     "fasta_content": ">test\nMKFLILFNILVSTLAFLSSSFAQVREIYHQHQHYINEQSSELKWHES\n",
                     "name": "test_recycles",
-                    "num_recycles": 3,
+                    "num_models": 3,
                 },
             )
             assert response.status_code == 202

@@ -1,5 +1,5 @@
 """
-End-to-end: ESMFold prediction -> Docking workflow.
+End-to-end: Boltz prediction -> Docking workflow.
 
 This test requires a real container runtime (Podman/Docker) and GPU.
 Skipped by default unless the 'e2e' and 'gpu' markers are explicitly selected.
@@ -15,5 +15,5 @@ pytestmark = [
 
 
 def test_predict_then_dock_e2e():
-    """ESMFold prediction followed by docking."""
+    """Boltz prediction followed by docking."""
     assert True

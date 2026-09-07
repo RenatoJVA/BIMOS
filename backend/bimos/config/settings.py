@@ -7,22 +7,12 @@ from importlib import resources
 from pathlib import Path
 from dotenv import load_dotenv
 
-from bimos.shared.paths import DEFAULTS_DIR
+from bimos.shared.paths import DEFAULTS_DIR, PROCESS_CONFIG_FILES
 
 BIMOS_BASE = (
     Path(os.getenv("BIMOS_BASE_PATH", Path.home() / ".bimos")).expanduser().resolve()
 )
 BIMOS_ENV_FILE = BIMOS_BASE / ".env"
-
-
-PROCESS_CONFIG_FILES = (
-    "docking",
-    "md",
-    "esmfold",
-    "boltz",
-    "orca",
-    "gaussian",
-)
 
 
 def _render_env_template() -> str:
@@ -40,7 +30,6 @@ def _render_env_template() -> str:
         "${BIMOS_WORKSPACE}": (BIMOS_BASE / "workspace").as_posix(),
         "${BIMOS_CACHE}": (BIMOS_BASE / "cache").as_posix(),
         "${BIMOS_LOGS}": (BIMOS_BASE / "logs").as_posix(),
-        "${BIMOS_ESM_CACHE}": (BIMOS_BASE / "cache" / "esm").as_posix(),
     }
     for placeholder, value in replacements.items():
         text = text.replace(placeholder, value)
@@ -128,14 +117,6 @@ class Settings:
         Path(os.getenv("BIMOS_LOGS", str(BIMOS_BASE / "logs"))).expanduser().resolve()
     )
 
-    # ESM model cache
-    esm_cache_path: Path = (
-        Path(os.getenv("BIMOS_ESM_CACHE", str(BIMOS_BASE / "cache" / "esm")))
-        .expanduser()
-        .resolve()
-    )
-    esm_model_url: str = "https://colabfold.steineggerlab.workers.dev/esm/esmfold.model"
-
     # Container image
     bimos_image: str = os.getenv("BIMOS_IMAGE", "localhost/bimos/global:latest")
     use_gpu: bool = os.getenv("BIMOS_USE_GPU", "true").lower() == "true"
@@ -209,7 +190,6 @@ class Settings:
             self.workspace_path,
             self.cache_path,
             self.logs_path,
-            self.esm_cache_path,
         ]:
             Path(p).mkdir(parents=True, exist_ok=True)
 

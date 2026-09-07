@@ -48,6 +48,10 @@ class FileJobStore:
         self.jobs_dir = settings.workspace_path / ".jobs"
         self.jobs_dir.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
+        self._log_buffers: dict[str, list[str]] = {}
+        self._log_buffer_size = 64
+        self._list_cache: Optional[list[JobRecord]] = None
+        self._list_cache_stamp: Optional[tuple[int, int]] = None
 
     def _path(self, job_id: str) -> Path:
         return self.jobs_dir / f"{job_id}.json"
@@ -60,6 +64,7 @@ class FileJobStore:
         tmp = p.with_suffix(f".{os.getpid()}.tmp")
         tmp.write_text(job.model_dump_json(indent=2))
         tmp.rename(p)
+        self._list_cache = None
 
     def _load(self, job_id: str) -> Optional[JobRecord]:
         p = self._path(job_id)
@@ -112,6 +117,7 @@ class FileJobStore:
             else:
                 job.error = f"Process exited with code {exit_code}"
             self._save_unlocked(job)
+        self.flush(job_id)
 
     def fail(self, job_id: str, error: str) -> None:
         with self._lock:
@@ -122,18 +128,44 @@ class FileJobStore:
             job.finished_at = datetime.now(timezone.utc).isoformat()
             job.error = error
             self._save_unlocked(job)
+        self.flush(job_id)
 
     def log(self, job_id: str, line: str) -> None:
-        """Append a line to the job's log file."""
+        """Buffer a log line, flushing to disk once the buffer fills."""
         with self._lock:
-            with open(self._log_path(job_id), "a", encoding="utf-8") as f:
-                f.write(line + "\n")
+            buf = self._log_buffers.get(job_id)
+            if buf is None:
+                buf = []
+                self._log_buffers[job_id] = buf
+            buf.append(line)
+            if len(buf) >= self._log_buffer_size:
+                self._flush_buffer(job_id, buf)
+
+    def _flush_buffer(self, job_id: str, buf: list[str]) -> None:
+        if not buf:
+            return
+        path = self._log_path(job_id)
+        try:
+            with open(path, "a", encoding="utf-8") as f:
+                f.write("\n".join(buf) + "\n")
+        finally:
+            buf.clear()
+
+    def flush(self, job_id: str) -> None:
+        """Flush any buffered log lines for a job to disk."""
+        with self._lock:
+            buf = self._log_buffers.get(job_id)
+            if buf:
+                self._flush_buffer(job_id, buf)
 
     def get_logs(self, job_id: str, tail: Optional[int] = None) -> list[str]:
+        self.flush(job_id)
         p = self._log_path(job_id)
         if not p.exists():
             return []
         try:
+            if tail is not None and tail > 0:
+                return self._tail_lines_fast(p, tail)
             lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
         except OSError:
             return []
@@ -141,26 +173,39 @@ class FileJobStore:
             return lines[-tail:]
         return lines
 
-    def tail_log(self, job_id: str, n: int = 10) -> list[str]:
-        """Return the last *n* lines of a job's log efficiently (reads from end)."""
-        p = self._log_path(job_id)
-        if not p.exists():
-            return []
+    @staticmethod
+    def _tail_lines_fast(path: Path, n: int) -> list[str]:
+        """Return the last *n* lines reading only the end of the file."""
         try:
-            with open(p, "rb") as f:
+            with open(path, "rb") as f:
                 f.seek(0, 2)
                 size = f.tell()
-                if size == 0:
-                    return []
-                chunk_size = min(size, 4096)
-                f.seek(max(0, size - chunk_size))
-                data = f.read(chunk_size).decode("utf-8", errors="replace")
-                lines = data.splitlines()
+                chunk_size = min(size, 8192)
+                lines: list[str] = []
+                offset = size
+                # Scan backwards until we have n lines or reach the start.
+                while offset > 0 and len(lines) < n:
+                    read_start = max(0, offset - chunk_size)
+                    read_end = offset
+                    f.seek(read_start)
+                    data = f.read(read_end - read_start).decode("utf-8", errors="replace")
+                    chunk_lines = data.splitlines()
+                    new_lines = chunk_lines[0:-1] if read_start > 0 else data.splitlines()
+                    lines = new_lines + lines
+                    offset = read_start
                 return lines[-n:]
         except OSError:
             return []
 
+    def tail_log(self, job_id: str, n: int = 10) -> list[str]:
+        """Return the last *n* lines of a job's log efficiently (reads from end)."""
+        self.flush(job_id)
+        return self._tail_lines_fast(self._log_path(job_id), n)
+
     def list_all(self) -> list[JobRecord]:
+        self._maybe_invalidate_list_cache()
+        if self._list_cache is not None:
+            return self._list_cache
         jobs = []
         for p in self.jobs_dir.glob("*.json"):
             try:
@@ -169,7 +214,18 @@ class FileJobStore:
             except Exception:
                 continue
         jobs.sort(key=lambda x: x.created_at, reverse=True)
+        self._list_cache = jobs
         return jobs
+
+    def _maybe_invalidate_list_cache(self) -> None:
+        """Rebuild the list cache only when the jobs directory content changed."""
+        try:
+            stamp = (len(list(self.jobs_dir.glob("*.json"))), self.jobs_dir.stat().st_mtime_ns)
+        except OSError:
+            return
+        if stamp != self._list_cache_stamp:
+            self._list_cache_stamp = stamp
+            self._list_cache = None
 
     def cancel(self, job_id: str) -> bool:
         with self._lock:
@@ -209,6 +265,8 @@ class FileJobStore:
                 deleted = True
             if log_p.exists():
                 log_p.unlink()
+            self._log_buffers.pop(job_id, None)
+            self._list_cache = None
                 
         # Clean up any running containers for this job
         try:

@@ -23,8 +23,7 @@ manual:
     - title: "## 3. Protein Structure Prediction"
       content: |
         Predict 3D structures from FASTA sequences using AI-driven folding models.
-        * **ESMFold**: `bimos predict sequence.fasta -o output_dir/`
-        * **Boltz-1**: `bimos predict-boltz sequence.fasta -n 5`
+        * **Boltz-1**: `bimos predict sequence.fasta -o output_dir/`
 
     - title: "## 4. Molecular Docking & Simulation"
       content: |

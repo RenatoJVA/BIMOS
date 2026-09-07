@@ -65,7 +65,7 @@ def seed_ligands() -> int:
     db: Session = SessionLocal()
     inserted = 0
     try:
-        existing_cids: set[str] = {row[0] for row in db.query(Ligand.cid).all()}
+        existing_cids: set[str] = set(db.scalars(db.query(Ligand.cid)).all())
 
         batch: list[Ligand] = []
 
