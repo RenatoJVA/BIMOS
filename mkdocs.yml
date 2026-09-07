@@ -1,8 +1,7 @@
 site_name: BIMOS
 site_description: Biomolecular Modeling Suite — Documentation
-site_url: https://bimos.ucsm.edu.pe
-repo_url: https://github.com/ucsm/bimos
-repo_name: ucsm/bimos
+repo_url: https://github.com/RenatoJVA/BIMOS
+repo_name: RenatoJVA/BIMOS
 
 theme:
   name: material

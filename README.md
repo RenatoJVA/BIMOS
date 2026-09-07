@@ -164,7 +164,7 @@ Please also cite the individual tools used in your workflow (GROMACS, AutoDock V
 
 ## Acknowledgments
 
-This project was funded by the **Universidad Católica de Santa María** through a competitive research grant.
+This project won a competitive research grant from the **Universidad Católica de Santa María**. No funding was ultimately awarded; the project was developed independently.
 
 ## License
 
