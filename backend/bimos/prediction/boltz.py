@@ -109,7 +109,7 @@ class BoltzPipeline(Pipeline):
             model_out.mkdir(exist_ok=True)
             self.log(f"Running model {index}/{num_models}...")
             cmd = self._build_cli_args(yaml_path.name, f"/workspace/predictions/model_{index}", cfg)
-            container.run(
+            rc = container.run(
                 command=cmd,
                 image=settings.bimos_image,
                 volumes=volumes,
@@ -117,6 +117,10 @@ class BoltzPipeline(Pipeline):
                 env=env,
                 on_output=self.on_output,
             )
+            if rc != 0:
+                raise RuntimeError(
+                    f"Boltz prediction failed for model {index}/{num_models} (exit {rc})."
+                )
 
         best = pick_best_boltz(pred_dir)
         if not best:

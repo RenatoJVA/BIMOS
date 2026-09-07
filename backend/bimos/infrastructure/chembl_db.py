@@ -2,8 +2,9 @@
 import sqlite3
 import logging
 import functools
+from contextlib import closing
 from pathlib import Path
-from typing import Any, List, Dict
+from typing import Any
 
 logger = logging.getLogger("bimos.chembl_db")
 
@@ -21,7 +22,7 @@ def _resolve_table_name(dataset_name: str, cursor: sqlite3.Cursor) -> str:
         table_name = row[0]
     return table_name
 
-def get_available_datasets() -> List[str]:
+def get_available_datasets() -> list[str]:
     if not DATA_DIR.exists():
         return []
     return [p.stem for p in DATA_DIR.glob("*.db")]
@@ -31,26 +32,26 @@ def export_to_sdf(dataset_name: str, output_path: Path) -> int:
     if not db_path.exists():
         raise FileNotFoundError(f"Dataset {dataset_name} not found at {db_path}")
 
-    conn = sqlite3.connect(str(db_path))
-    cursor = conn.cursor()
+    with closing(sqlite3.connect(str(db_path))) as conn:
+        cursor = conn.cursor()
 
-    table_name = _resolve_table_name(dataset_name, cursor)
+        table_name = _resolve_table_name(dataset_name, cursor)
 
-    try:
-        cursor.execute(
-            f"SELECT chembl_id, pref_name, canonical_smiles FROM {table_name}"  # nosec - table_name validated by _resolve_table_name
-        )
-        rows = cursor.fetchall()
-    except sqlite3.OperationalError:
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-        tables = cursor.fetchone()
-        if not tables:
-            raise RuntimeError(f"No tables found in {db_path}")
-        table_name = tables[0]
-        cursor.execute(
-            f"SELECT chembl_id, pref_name, canonical_smiles FROM {table_name}"  # nosec - table_name from sqlite_master
-        )
-        rows = cursor.fetchall()
+        try:
+            cursor.execute(
+                f"SELECT chembl_id, pref_name, canonical_smiles FROM {table_name}"  # nosec - table_name validated by _resolve_table_name
+            )
+            rows = cursor.fetchall()
+        except sqlite3.OperationalError:
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+            tables = cursor.fetchone()
+            if not tables:
+                raise RuntimeError(f"No tables found in {db_path}")
+            table_name = tables[0]
+            cursor.execute(
+                f"SELECT chembl_id, pref_name, canonical_smiles FROM {table_name}"  # nosec - table_name from sqlite_master
+            )
+            rows = cursor.fetchall()
 
     count = 0
     with open(output_path, "w") as f:
@@ -67,7 +68,6 @@ def export_to_sdf(dataset_name: str, output_path: Path) -> int:
             f.write("$$$$\n")
             count += 1
 
-    conn.close()
     return count
 
 
@@ -77,17 +77,16 @@ def search_candidates(dataset_name: str, query: str) -> list[dict[str, Any]]:
     if not db_path.exists():
         return []
 
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
+    with closing(sqlite3.connect(str(db_path))) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
 
-    table_name = _resolve_table_name(dataset_name, cursor)
+        table_name = _resolve_table_name(dataset_name, cursor)
 
-    sql = (
-        f"SELECT * FROM {table_name} "  # nosec - table_name validated by _resolve_table_name
-        "WHERE pref_name LIKE ? OR chembl_id LIKE ? OR canonical_smiles LIKE ? LIMIT 50"
-    )
-    cursor.execute(sql, (f"%{query}%", f"%{query}%", f"%{query}%"))
-    results = [dict(row) for row in cursor.fetchall()]
-    conn.close()
+        sql = (
+            f"SELECT * FROM {table_name} "  # nosec - table_name validated by _resolve_table_name
+            "WHERE pref_name LIKE ? OR chembl_id LIKE ? OR canonical_smiles LIKE ? LIMIT 50"
+        )
+        cursor.execute(sql, (f"%{query}%", f"%{query}%", f"%{query}%"))
+        results = [dict(row) for row in cursor.fetchall()]
     return results

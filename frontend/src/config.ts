@@ -1,6 +1,6 @@
 /** Maps UI flow ids to backend process config names. */
 export const FLOW_CONFIG_KEY: Record<string, string> = {
-  predict: 'esmfold',
+  predict: 'boltz',
   dock: 'docking',
   qm: 'orca',
   md: 'md',

@@ -17,12 +17,6 @@ class JobResponse(BaseModel):
     meta: dict[str, Any] = {}
     results: Optional[Any] = None
 
-class PredictRequest(BaseModel):
-    fasta_content: str
-    name: str = "protein"
-    num_recycles: int | None = None
-    max_resources: bool = False
-
 class PredictBoltzRequest(BaseModel):
     fasta_content: str
     name: str = "protein"

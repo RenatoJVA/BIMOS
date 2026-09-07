@@ -8,6 +8,7 @@ import subprocess
 import uvicorn
 from pathlib import Path
 import socket
+from typing import TypedDict
 from urllib.parse import urlparse
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,11 +32,28 @@ app.add_middleware(
 app.include_router(router)
 
 
+class _ThemeCache(TypedDict):
+    value: str | None
+    ts: float
+
+
+# OS theme detection is polled by the frontend; cache it briefly so we don't
+# spawn up to 5 subprocesses on every request.
+_theme_cache: _ThemeCache = {"value": None, "ts": 0.0}
+_THEME_TTL = 5.0
+
+
 @app.get("/api/v1/system/theme")
 async def get_system_theme():  # type: ignore[no-untyped-def]
     """Endpoint for the frontend to poll the current OS theme."""
-    is_dark = _detect_system_dark_mode()
-    return {"theme": "dark" if is_dark else "light"}
+    now = time.monotonic()
+    cached = _theme_cache
+    if cached["value"] is not None and now - cached["ts"] < _THEME_TTL:
+        return {"theme": cached["value"]}
+    is_dark = await _detect_system_dark_mode_async()
+    cached["value"] = "dark" if is_dark else "light"
+    cached["ts"] = now
+    return {"theme": cached["value"]}
 
 
 # Resolve path to UI assets (works natively and inside Nuitka)
@@ -51,6 +69,13 @@ else:
     @app.get("/")
     async def root():  # type: ignore[no-untyped-def]
         return {"name": "BIMOS", "version": "0.1.0", "docs": "/docs", "ui": "Not compiled"}
+
+
+async def _detect_system_dark_mode_async() -> bool:
+    """Run blocking OS theme detection off the event loop."""
+    import asyncio
+
+    return await asyncio.to_thread(_detect_system_dark_mode)
 
 
 def _detect_system_dark_mode() -> bool:

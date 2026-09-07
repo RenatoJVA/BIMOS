@@ -1,4 +1,4 @@
-"""FASTA/YAML parsing and Boltz/ESMFold YAML generation."""
+"""FASTA/YAML parsing and Boltz YAML generation."""
 
 from pathlib import Path
 

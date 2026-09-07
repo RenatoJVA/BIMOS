@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 import rich_click as click
 from bimos.config.settings import settings
+from bimos.shared.paths import PROCESS_CONFIG_FILES
 
 def _print(msg: str) -> None:
     click.echo(msg)
@@ -16,7 +17,7 @@ def setup(force: bool, config_only: bool) -> None:
     settings.ensure_dirs()
     config_dir = user_config_dir()
     click.echo(f"User config directory: {config_dir}")
-    for name in ("docking", "md", "esmfold", "boltz", "orca", "gaussian"):
+    for name in PROCESS_CONFIG_FILES:
         path = config_dir / f"{name}.yaml"
         status = "custom" if is_custom(name) else "default"
         click.echo(f"  {path.name}: {status}")

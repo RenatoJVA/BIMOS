@@ -1,10 +1,9 @@
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
-from bimos.prediction.confidence import pick_best_esmfold, pick_best_boltz
+from bimos.prediction.confidence import pick_best_boltz
 from bimos.prediction.fasta import read_sequences, write_boltz_yaml
 
 
@@ -42,23 +41,6 @@ def test_read_sequences_empty_raises(tmp_path: Path) -> None:
         read_sequences(fasta)
 
 
-def test_pick_best_esmfold_none(tmp_path: Path) -> None:
-    result = pick_best_esmfold(tmp_path)
-    assert result is None
-
-
-def test_pick_best_esmfold_finds_best(tmp_path: Path) -> None:
-    (tmp_path / "model_0").mkdir(parents=True)
-    for i, score in enumerate([0.7, 0.9, 0.8]):
-        conf = tmp_path / "model_0" / f"confidence_{i}.json"
-        conf.write_text(json.dumps({"confidence_score": score}))
-        pdb = tmp_path / "model_0" / f"{i}.pdb"
-        pdb.write_text("ATOM dummy\n")
-    best = pick_best_esmfold(tmp_path)
-    assert best is not None
-    assert best["score"] == 0.9
-
-
 def test_pick_best_boltz_none(tmp_path: Path) -> None:
     result = pick_best_boltz(tmp_path)
     assert result is None
@@ -74,28 +56,6 @@ def test_pick_best_boltz_finds_best(tmp_path: Path) -> None:
     best = pick_best_boltz(tmp_path)
     assert best is not None
     assert best["score"] == 0.85
-
-
-def test_pick_best_esmfold_invalid_json_skipped(tmp_path: Path) -> None:
-    (tmp_path / "model").mkdir(parents=True)
-    conf = tmp_path / "model" / "confidence_bad.json"
-    conf.write_text("not json")
-    result = pick_best_esmfold(tmp_path)
-    assert result is None
-
-
-def test_esmfold_pipeline_ensure_download_only(tmp_path: Path) -> None:
-    from bimos.prediction.esmfold import ESMFoldPipeline
-
-    pipeline = ESMFoldPipeline(output_dir=str(tmp_path))
-    model_dir = tmp_path / "models"
-    model_dir.mkdir(parents=True)
-    model_file = model_dir / "esmfold.model"
-    model_file.write_text("dummy model")
-
-    with patch.object(pipeline, "_ensure_model", return_value=model_dir):
-        result = pipeline._ensure_model()
-        assert result == model_dir
 
 
 def test_boltz_build_cli_args() -> None:

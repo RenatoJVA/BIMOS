@@ -4,6 +4,7 @@ Compiles the application into a standalone executable via Nuitka.
 """
 
 import importlib.util
+import shutil
 import subprocess
 import sys
 import platform
@@ -17,36 +18,64 @@ def _webview_package_dir() -> Path | None:
     return Path(spec.origin).resolve().parent
 
 
-def _build_frontend() -> None:
+def _build_frontend(skip: bool = False) -> None:
+    """Build frontend sources and sync ``frontend/dist`` into ``bimos/ui``.
+
+    The sync always replaces ``bimos/ui`` so stale hashed assets from a
+    previous build (e.g. old ESMFold-era bundles) cannot leak into the
+    packaged binary.
+    """
     frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
     target_ui = Path("bimos") / "ui"
-    if target_ui.exists() and (target_ui / "index.html").exists():
-        return
     if not frontend_dir.exists():
         print("Skipping frontend: frontend/ directory not found.")
         return
-    print("Building frontend...")
-    subprocess.run(["bun", "install"], cwd=str(frontend_dir), check=True)
-    subprocess.run(["bun", "run", "build"], cwd=str(frontend_dir), check=True)
+    if skip:
+        print("Skipping frontend build (--skip-frontend).")
+    else:
+        print("Building frontend...")
+        subprocess.run(["bun", "install"], cwd=str(frontend_dir), check=True)
+        subprocess.run(["bun", "run", "build"], cwd=str(frontend_dir), check=True)
     dist_dir = frontend_dir / "dist"
-    if dist_dir.exists():
-        target_ui.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["cp", "-r", str(dist_dir) + "/.", str(target_ui)], check=True)
+    if not (dist_dir / "index.html").exists():
+        print(f"Error: frontend build output missing: {dist_dir / 'index.html'}")
+        sys.exit(1)
+    if target_ui.exists():
+        shutil.rmtree(target_ui)
+    shutil.copytree(dist_dir, target_ui)
+    print(f"Synced {dist_dir} → {target_ui}")
 
 
 def main():
+    import argparse
     import os
-    import shutil
+
+    parser = argparse.ArgumentParser(description="Build BIMOS frontend + Nuitka binary.")
+    parser.add_argument(
+        "--skip-frontend",
+        action="store_true",
+        help="Skip 'bun run build'; sync existing frontend/dist into bimos/ui.",
+    )
+    parser.add_argument(
+        "--skip-nuitka",
+        action="store_true",
+        help="Only build/sync the frontend; do not compile with Nuitka.",
+    )
+    args = parser.parse_args()
 
     print("Building BIMOS with Nuitka...")
 
-    # ── Step 1: Ensure frontend UI is built (BD-01: concurrent when possible) ──
-    _build_frontend()
+    # ── Step 1: Ensure frontend UI is built (BD-01) ──
+    _build_frontend(skip=args.skip_frontend)
 
     if not (Path("bimos") / "ui" / "index.html").exists():
         print("Error: Frontend UI not found in bimos/ui/")
         print("Run 'bun run build' in frontend/ and copy 'dist/' to 'backend/bimos/ui/'")
         sys.exit(1)
+
+    if args.skip_nuitka:
+        print("Frontend ready. Skipping Nuitka compilation.")
+        return
 
     # ── Step 2: Clean previous build artifacts ──
     dist_dir = Path("dist")
@@ -54,7 +83,7 @@ def main():
         print("Cleaning previous build artifacts...")
         shutil.rmtree(dist_dir)
 
-    cores = max(1, int((os.cpu_count() or 1) * 0.5))
+    cores = max(1, int((os.cpu_count() or 1) * 0.8))
     is_windows = platform.system().lower() == "windows"
     is_macos = platform.system().lower() == "darwin"
     is_linux = not is_windows and not is_macos
@@ -69,7 +98,7 @@ def main():
         # "--onefile-no-compression",
         # Embed the React static files
         "--include-data-dir=bimos/ui=bimos/ui",
-        "--include-data-dir=bimos/scripts=bimos/scripts",
+        "--include-data-files=bimos/scripts/*.py=bimos/scripts/",
         "--include-data-dir=bimos/infrastructure/config=bimos/infrastructure/config",
         "--include-data-dir=bimos/infrastructure/data=bimos/infrastructure/data",
         "--include-data-dir=bimos/config/defaults=bimos/config/defaults",

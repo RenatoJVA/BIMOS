@@ -208,7 +208,7 @@ export function FlowLauncher({
           }
         >
           <h3 className="text-xl font-bold text-accent capitalize">
-            {activeFlow === 'predict' ? 'ESMFold Prediction' : 
+            {activeFlow === 'predict' ? 'Boltz Prediction' : 
              activeFlow === 'dock' ? 'Vina Docking' : 
              activeFlow === 'qm' ? 'ORCA QM Pipeline' : 'GROMACS MD Simulation'}
           </h3>

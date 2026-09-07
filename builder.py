@@ -12,7 +12,7 @@ Usage:
     python builder.py [OPTIONS]
 
 Options:
-    --skip-frontend    Skip 'bun run build' (use existing dist/)
+    --skip-frontend    Skip building the frontend (use existing bimos/ui/)
     --skip-nuitka      Skip Nuitka compilation (use existing binary)
     --skip-installer   Only compile; do not package installer
     --target linux|windows|macos   Override auto-detected platform
@@ -67,29 +67,25 @@ def read_version(root: Path) -> str:
 # ── Build steps ─────────────────────────────────────────────────────────────
 
 def build_frontend(root: Path):
+    """Build the frontend and sync it into backend/bimos/ui via backend/build.py.
+
+    Delegates to ``backend/build.py --skip-nuitka`` so there is a single source
+    of truth for the frontend build/sync step.
+    """
     info("Building Frontend (bun)...")
     require("bun", "Install bun: https://bun.sh")
-    run(["bun", "run", "build"], cwd=root / "frontend")
-    ok("Frontend built")
-
-
-def sync_ui(root: Path):
-    info("Syncing Frontend → Backend UI...")
-    src = root / "frontend" / "dist"
-    dst = root / "backend" / "bimos" / "ui"
-    if dst.exists():
-        shutil.rmtree(dst)
-    shutil.copytree(src, dst)
-    ok(f"Copied {src} → {dst}")
+    run(["uv", "run", "python", "build.py", "--skip-nuitka"], cwd=root / "backend")
+    ok("Frontend built and synced")
 
 
 def build_nuitka(root: Path):
     info("Compiling with Nuitka...")
     backend = root / "backend"
+    # Frontend already built/synced by build_frontend(); skip to avoid rebuild.
     if shutil.which("uv"):
-        run(["uv", "run", "python", "build.py"], cwd=backend)
+        run(["uv", "run", "python", "build.py", "--skip-frontend"], cwd=backend)
     else:
-        run([sys.executable, "build.py"], cwd=backend)
+        run([sys.executable, "build.py", "--skip-frontend"], cwd=backend)
     ok("Nuitka compilation done")
 
 
@@ -321,7 +317,7 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    p.add_argument("--skip-frontend",  action="store_true", help="Skip bun build")
+    p.add_argument("--skip-frontend",  action="store_true", help="Skip building/syncing the frontend")
     p.add_argument("--skip-nuitka",    action="store_true", help="Skip Nuitka compilation")
     p.add_argument("--skip-installer", action="store_true", help="Only compile, no installer")
     p.add_argument(
@@ -348,7 +344,6 @@ def main():
     # ── Step 1: Frontend ────────────────────────────────────
     if not args.skip_frontend:
         build_frontend(root)
-        sync_ui(root)
     else:
         warn("Skipping frontend build")
 

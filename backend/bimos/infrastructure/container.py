@@ -8,6 +8,7 @@ Works with rootless Podman (no daemon socket required).
 import subprocess
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -125,7 +126,12 @@ def run(
             finally:
                 process.stdin.close()
 
-        if process.stdout:
+        # Stream output in a daemon thread so wait(timeout) applies even while
+        # the child keeps emitting lines (previously the timeout only fired after
+        # stdout was fully consumed, so a hanging-but-noisy process never timed out).
+        def _reader() -> None:
+            if process.stdout is None:
+                return
             for line in process.stdout:
                 stripped = line.rstrip()
                 if stripped:
@@ -133,7 +139,11 @@ def run(
                     if on_output:
                         on_output(stripped)
 
+        reader = threading.Thread(target=_reader, name="bimos-container-reader", daemon=True)
+        reader.start()
+
         rc = process.wait(timeout=timeout)
+        reader.join(timeout=10)
         from bimos.infrastructure.job_store import current_job_id, store, JobStatus
         job_id = current_job_id.get()
         if job_id:

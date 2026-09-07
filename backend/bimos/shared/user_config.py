@@ -9,6 +9,7 @@ Profiles:
 
 from __future__ import annotations
 
+import copy
 import json
 import shutil
 from enum import StrEnum
@@ -19,16 +20,7 @@ from typing import Any
 import yaml
 
 from bimos.config.settings import settings
-from bimos.shared.paths import DEFAULTS_DIR
-
-PROCESS_CONFIG_FILES = (
-    "docking",
-    "md",
-    "esmfold",
-    "boltz",
-    "orca",
-    "gaussian",
-)
+from bimos.shared.paths import DEFAULTS_DIR, PROCESS_CONFIG_FILES
 
 
 class ConfigProfile(StrEnum):
@@ -98,7 +90,7 @@ def ensure_user_configs() -> None:
 def _max_patch(name: str, data: dict[str, Any]) -> dict[str, Any]:
     """Apply resource-max overrides without touching non-resource tunables."""
     threads = settings.get_threads()
-    patched = yaml.safe_load(yaml.safe_dump(data)) or {}
+    patched = copy.deepcopy(data)
 
     if name == "docking":
         vina = patched.setdefault("vina", {})
@@ -140,7 +132,7 @@ def resolve(
         data = user
         profile = ConfigProfile.CUSTOM
     else:
-        data = yaml.safe_load(yaml.safe_dump(packaged)) or {}
+        data = copy.deepcopy(packaged) or {}
         profile = ConfigProfile.DEFAULT
 
     use_max = max_mode if max_mode is not None else settings.max_threads
@@ -155,7 +147,7 @@ def resolve(
 
 
 def _deep_merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
-    result = yaml.safe_load(yaml.safe_dump(base)) or {}
+    result = copy.deepcopy(base) or {}
     for key, value in patch.items():
         if isinstance(value, dict) and isinstance(result.get(key), dict):
             result[key] = _deep_merge(result[key], value)

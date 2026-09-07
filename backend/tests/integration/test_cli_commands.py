@@ -79,7 +79,7 @@ def test_cli_predict_with_fasta(runner: CliRunner, tmp_path: Path, monkeypatch) 
     fake_job.id = "cli_test_job"
     fake_store.create.return_value = fake_job
     with patch("bimos.cli.commands.predict.store", fake_store):
-        with patch("bimos.prediction.predict_structure", return_value={"status": "completed", "pdb_file": "", "confidence": 0.9, "output_dir": ""}):
+        with patch("bimos.prediction.predict_boltz", return_value={"status": "completed", "struct_file": "", "confidence": 0.9, "output_dir": ""}):
             result = runner.invoke(cli, ["predict", str(fasta)])
             assert result.exit_code == 0
             assert "Job ID: cli_test_job" in result.output
