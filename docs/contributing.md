@@ -1,6 +1,6 @@
 # Contributing
 
-See [`CONTRIBUTING.md`](https://github.com/ucsm/bimos/blob/main/CONTRIBUTING.md) and [`VERSIONING.md`](https://github.com/ucsm/bimos/blob/main/VERSIONING.md) for the full contribution guidelines.
+See [`CONTRIBUTING.md`](https://github.com/RenatoJVA/BIMOS/blob/main/CONTRIBUTING.md) and [`VERSIONING.md`](https://github.com/RenatoJVA/BIMOS/blob/main/VERSIONING.md) for the full contribution guidelines.
 
 ## Quick Checklist
 

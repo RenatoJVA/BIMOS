@@ -9,7 +9,7 @@ pip install bimos
 ## From Source
 
 ```bash
-git clone https://github.com/ucsm/bimos.git
+git clone https://github.com/RenatoJVA/BIMOS.git
 cd bimos/backend
 pip install -e .
 ```
@@ -23,13 +23,13 @@ pip install -e ".[dev]"
 ## Container Image
 
 ```bash
-docker pull ghcr.io/ucsm/bimos:latest
+docker pull ghcr.io/renatojva/bimos:latest
 
 # Run CLI commands
-docker run --rm ghcr.io/ucsm/bimos predict --help
+docker run --rm ghcr.io/renatojva/bimos predict --help
 
 # Start API server
-docker run --rm -p 8000:8000 ghcr.io/ucsm/bimos serve
+docker run --rm -p 8000:8000 ghcr.io/renatojva/bimos serve
 ```
 
 ## Docker Compose
