@@ -111,6 +111,42 @@ select = [
 ]
 ignore = ["E501"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI treats File()/Form()/Depends() as immutable default-args descriptors
+extend-immutable-calls = ["fastapi.File", "fastapi.Form", "fastapi.Path", "fastapi.Query", "fastapi.Depends"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI multipart handlers: File()/Form() default args are FastAPI descriptors
+"bimos/api/endpoints/dock.py" = ["B008", "PLR0913"]
+"bimos/api/endpoints/simulate.py" = ["B008"]
+# Deliberate silent best-effort theme detection: any subprocess/tool missing must
+# not crash theme detection; fall through to the next method.
+"bimos/api/server.py" = ["S110", "S607", "PLR0912", "PLR0911"]
+"bimos/api/endpoints/system.py" = ["S110", "S607"]
+# Seed data uses random only for plausible demo values, not cryptography.
+"bimos/infrastructure/database.py" = ["S311"]
+# Container/infra code shells out to docker/podman with argv arrays (no shell=True);
+# command tokens come from job config, not user free text.
+"bimos/infrastructure/container.py" = ["S603", "S607", "PLR0915", "PLR0913", "PLR0912"]
+"bimos/infrastructure/job_store.py" = ["S603", "S110", "S112"]
+# GROMACS/ORCA/Gaussian are invoked by name from $PATH (host/CONDA_ENV), argv-only
+"bimos/quantum_chemistry/pipeline.py" = ["S603", "S607", "PLR0915", "PLR0912"]
+"bimos/quantum_chemistry/itp.py" = ["PLR2004"]
+# SQL table names come from an allow-list (ALLOWED_TABLES / sqlite_master), see
+# _resolve_table_name; queries are read-only.
+"bimos/infrastructure/chembl_db.py" = ["S608"]
+# High-branch monolithic MD pipeline runner: validated by integration tests.
+"bimos/molecular_dynamics/pipeline.py" = ["PLR0912", "PLR0915", "PLR2004"]
+"bimos/docking/pipeline.py" = ["PLR0915", "PLR0913"]
+# Click command groups with many options: standard click pattern.
+"bimos/cli/main.py" = ["PLR0913"]
+"bimos/cli/commands/dock.py" = ["PLR0913"]
+"bimos/cli/commands/predict.py" = ["PLR0913"]
+"bimos/cli/commands/workflow.py" = ["PLR0913"]
+# Tests intentionally use assert (pytest idiom), literal values, and fixtures
+# with unused parameters (dependency injection by name).
+"tests/**/*.py" = ["S101", "PLR2004", "ARG001", "ARG002", "ARG005", "S108", "SIM117", "PLR0913", "F841", "RUF059"]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"

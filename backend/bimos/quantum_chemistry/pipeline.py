@@ -9,10 +9,12 @@ import os
 import re
 import subprocess
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from bimos.config.settings import settings
+from bimos.infrastructure import cancellation
 from bimos.quantum_chemistry.config import GaussianConfig, OrcaConfig
 from bimos.quantum_chemistry.elements import atomic_number
 from bimos.quantum_chemistry.itp import update_itp_charges
@@ -64,6 +66,17 @@ class QMPipeline(Pipeline):
         xyz_content = xyz_path.read_text(encoding="utf-8").splitlines()
         return xyz_path, xyz_content[2:]
 
+    @staticmethod
+    def _kill_processes(processes: list[tuple[subprocess.Popen[bytes], Any, Path]]) -> None:
+        """Kill every process that is still running."""
+        for proc, _gro in processes:
+            if proc.poll() is None:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=10)
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+
 
 class OrcaPipeline(QMPipeline):
     """ORCA Hirshfeld charge pipeline."""
@@ -111,6 +124,9 @@ class OrcaPipeline(QMPipeline):
             env["OMPI_MCA_hwloc_base_binding_policy"] = "none"
 
             while len([item for item in processes if item[0].poll() is None]) >= cfg.max_jobs:
+                if cancellation.current_is_canceled():
+                    self._kill_processes(processes)
+                    raise RuntimeError("Job canceled by user.")
                 time.sleep(1)
 
             self.log(f"Launching ORCA for {gro.name}")
@@ -124,13 +140,16 @@ class OrcaPipeline(QMPipeline):
                 )
             processes.append((proc, gro))
 
-        for proc, gro in processes:
-            try:
-                proc.wait(timeout=86400)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
-                self.log(f"ORCA process timed out for {gro.name}", level="WARNING")
+        for proc, _gro in processes:
+            while proc.poll() is None:
+                if cancellation.current_is_canceled():
+                    proc.kill()
+                    proc.wait()
+                    raise RuntimeError("Job canceled by user.")
+                try:
+                    proc.wait(timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    continue
 
         results: list[str] = []
         pattern = re.compile(r"^\s*\d+\s+[A-Z][a-zA-Z]?\s+([-]?\d+\.\d+)")
@@ -201,6 +220,9 @@ class GaussianPipeline(QMPipeline):
             log_path = gjf_path.with_suffix(".log")
 
             while len([item for item in processes if item[0].poll() is None]) >= cfg.max_jobs:
+                if cancellation.current_is_canceled():
+                    self._kill_processes(processes)
+                    raise RuntimeError("Job canceled by user.")
                 time.sleep(1)
 
             self.log(f"Launching Gaussian for {gro.name}")
@@ -213,13 +235,16 @@ class GaussianPipeline(QMPipeline):
                 )
             processes.append((proc, gro))
 
-        for proc, gro in processes:
-            try:
-                proc.wait(timeout=86400)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
-                self.log(f"Gaussian process timed out for {gro.name}", level="WARNING")
+        for proc, _gro in processes:
+            while proc.poll() is None:
+                if cancellation.current_is_canceled():
+                    proc.kill()
+                    proc.wait()
+                    raise RuntimeError("Job canceled by user.")
+                try:
+                    proc.wait(timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    continue
 
         results: list[str] = []
         pattern = re.compile(r"^\s*(\d+)\s+([A-Z][a-zA-Z]?)\s+([-]?\d+\.\d+)")
@@ -240,7 +265,7 @@ class GaussianPipeline(QMPipeline):
                     if not inside:
                         continue
                     parts = line.split()
-                    if len(parts) >= 2 and parts[1] == "Tot":
+                    if parts[1:2] == ["Tot"]:
                         break
                     match = pattern.match(line)
                     if match:

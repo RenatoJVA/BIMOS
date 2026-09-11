@@ -6,9 +6,10 @@ from __future__ import annotations
 
 import logging
 import shutil
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from bimos.config.settings import settings
 from bimos.docking.config import DockingConfig
@@ -229,7 +230,15 @@ class DockingPipeline(Pipeline):
             shutil.copy2(lig_pdbqt, complex_dir / lig_pdbqt.name)
             shutil.copy2(conf_path, complex_dir / conf_path.name)
 
-            def _run_single_vina(run_index: int) -> tuple[int, Path, float | None]:
+            def _run_single_vina(
+                run_index: int,
+                *,
+                complex_name: str = complex_name,
+                receptor_pdbqt: Path = receptor_pdbqt,
+                lig_pdbqt: Path = lig_pdbqt,
+                conf_path: Path = conf_path,
+                complex_dir: Path = complex_dir,
+            ) -> tuple[int, Path, float | None]:
                 out_name = f"{complex_name}-{run_index}.pdbqt"
                 rc = self._container_run(
                     [

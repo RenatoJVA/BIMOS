@@ -1,7 +1,4 @@
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 from bimos.molecular_dynamics.pipeline import MolecularDynamicsPipeline, Stage
 

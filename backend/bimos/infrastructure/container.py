@@ -5,14 +5,18 @@ Uses subprocess to call Podman or Docker, streaming output line by line.
 Works with rootless Podman (no daemon socket required).
 """
 
-import subprocess
+import contextlib
 import logging
 import os
+import subprocess
 import threading
+import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 from bimos.config.settings import settings
+from bimos.infrastructure import cancellation
+from bimos.infrastructure.job_store import current_job_id
 
 logger = logging.getLogger("bimos.container")
 
@@ -37,11 +41,11 @@ def _get_proc_env() -> dict[str, str]:
 def run(
     command: list[str],
     image: str = "",
-    volumes: Optional[dict[str, str]] = None,
+    volumes: dict[str, str] | None = None,
     workdir: str = "/workspace",
-    on_output: Optional[Callable[[str], None]] = None,
-    env: Optional[dict[str, str]] = None,
-    stdin_text: Optional[str] = None,
+    on_output: Callable[[str], None] | None = None,
+    env: dict[str, str] | None = None,
+    stdin_text: str | None = None,
     timeout: int = 7200,
 ) -> int:
     """
@@ -64,7 +68,7 @@ def run(
 
     if image:
         full_cmd = [runtime, "run", "-i" ,"--rm", "--workdir", workdir]
-        
+
         # Thread limiting (default 1/3 available)
         t = settings.get_threads()
         full_cmd += ["-e", f"OMP_NUM_THREADS={t}", "-e", f"MKL_NUM_THREADS={t}"]
@@ -90,7 +94,6 @@ def run(
             for k, v in env.items():
                 full_cmd += ["-e", f"{k}={v}"]
 
-        from bimos.infrastructure.job_store import current_job_id
         job_id = current_job_id.get()
         if job_id:
             full_cmd += ["--label", f"bimos_job_id={job_id}"]
@@ -142,14 +145,19 @@ def run(
         reader = threading.Thread(target=_reader, name="bimos-container-reader", daemon=True)
         reader.start()
 
-        rc = process.wait(timeout=timeout)
+        # Wait for completion, polling so a user cancellation aborts promptly
+        # instead of letting the job spin until the timeout expires.
+        rc = _wait_for(process, timeout=timeout, job_id=current_job_id.get())
+
         reader.join(timeout=10)
-        from bimos.infrastructure.job_store import current_job_id, store, JobStatus
-        job_id = current_job_id.get()
-        if job_id:
-            job = store.get(job_id)
-            if job and job.status == JobStatus.CANCELED:
-                raise RuntimeError(f"Job {job_id} was canceled by user.")
+
+        if rc == _CANCELED_RC:
+            msg = f"[BIMOS] Job {current_job_id.get() or ''} was canceled by user."
+            logger.info(msg)
+            if on_output:
+                on_output(msg)
+            return rc
+
         return rc
 
     except subprocess.TimeoutExpired:
@@ -181,7 +189,7 @@ def image_exists(image: str) -> bool:
     return result.returncode == 0
 
 
-def build_image(dockerfile: str, tag: str, context: str = ".", on_output: Optional[Callable[[str], None]] = None) -> int:
+def build_image(dockerfile: str, tag: str, context: str = ".", on_output: Callable[[str], None] | None = None) -> int:
     """Build a container image from a Dockerfile."""
     runtime = _detect_runtime()
     cmd = [runtime, "build", "-t", tag, "-f", dockerfile, context]
@@ -190,3 +198,48 @@ def build_image(dockerfile: str, tag: str, context: str = ".", on_output: Option
         on_output(f"Building image {tag} with {runtime}...")
 
     return run(command=cmd, on_output=on_output)
+
+
+# Sentinels returned by _wait_for.
+_CANCELED_RC = -3
+_TIMED_OUT_RC = -1
+
+
+def _wait_for(process: subprocess.Popen, *, timeout: int, job_id: str) -> int:
+    """
+    Wait for *process* to exit, checking the job's cancellation event every
+    ~500ms so the wait aborts promptly when the user cancels the job.
+
+    Returns the process exit code, _CANCELED_RC when the job was canceled,
+    or _TIMED_OUT_RC on timeout. On cancel/timeout the process is killed.
+    """
+    deadline = None if timeout is None else time.monotonic() + timeout
+    cancel_event = cancellation.event_for(job_id) if job_id else None
+
+    while True:
+        if cancel_event is not None and cancel_event.is_set():
+            _kill(process)
+            return _CANCELED_RC
+
+        if deadline is not None and time.monotonic() >= deadline:
+            _kill(process)
+            return _TIMED_OUT_RC
+
+        try:
+            rc = process.wait(timeout=0.5)
+        except subprocess.TimeoutExpired:
+            continue
+
+        # subprocess.Popen.wait never returns None on a real process; treat it
+        # as an abnormal exit (keeps mock-based tests meaningful).
+        if rc is None:
+            return _TIMED_OUT_RC
+        return rc
+
+
+def _kill(process: subprocess.Popen) -> None:
+    """Terminate the process (and its children if it runs as a group leader)."""
+    with contextlib.suppress(OSError):
+        process.kill()
+    with contextlib.suppress(OSError, subprocess.TimeoutExpired):
+        process.wait(timeout=10)

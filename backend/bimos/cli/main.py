@@ -6,14 +6,11 @@
 Use this CLI to run predictions, dockings, and MD simulations locally or submit them as background jobs.
 """
 
-import sys
 import logging
-import threading
 from pathlib import Path
 
 import rich_click as click
 import yaml
-
 from rich.console import Console
 from rich.markdown import Markdown
 
@@ -98,9 +95,9 @@ def cli(ctx: click.Context, debug: bool, max: bool, gui: bool, manual: bool, hos
         console = Console()
         manual_path = Path(__file__).parent / "manual.yaml"
         if manual_path.exists():
-            with open(manual_path, "r") as f:
+            with open(manual_path) as f:
                 data = yaml.safe_load(f)
-            
+
             m = data.get("manual", {})
             text = f"{m.get('title', '# BIMOS Manual')}\n\n"
             text += f"{m.get('description', '')}\n\n"
@@ -114,10 +111,9 @@ def cli(ctx: click.Context, debug: bool, max: bool, gui: bool, manual: bool, hos
             console.print("[yellow]Ensure the file was included in the build (check build.py).[/yellow]")
         ctx.exit()
 
-    from bimos.config.settings import settings
-    from bimos.infrastructure.job_store import store
-
     import gc
+
+    from bimos.config.settings import settings
     gc.collect()
 
     if debug:
@@ -130,7 +126,7 @@ def cli(ctx: click.Context, debug: bool, max: bool, gui: bool, manual: bool, hos
     # GUI Mode Execution
     if gui:
         from bimos.api.server import start_server
-        
+
         if headless:
             click.echo(f"Starting BIMOS headless API on {host}:{port} ...")
         else:
@@ -152,12 +148,12 @@ def cli(ctx: click.Context, debug: bool, max: bool, gui: bool, manual: bool, hos
 
 
 def _lazy_register_commands() -> None:
-    from bimos.cli.commands.setup import setup
-    from bimos.cli.commands.predict import predict, predict_boltz
     from bimos.cli.commands.dock import dock
+    from bimos.cli.commands.predict import predict, predict_boltz
+    from bimos.cli.commands.qm import qm_g16, qm_orca
+    from bimos.cli.commands.setup import setup
+    from bimos.cli.commands.system import completion, db, jobs
     from bimos.cli.commands.workflow import workflow
-    from bimos.cli.commands.qm import qm_orca, qm_g16
-    from bimos.cli.commands.system import jobs, db, completion
 
     cli.add_command(setup)
     cli.add_command(predict)

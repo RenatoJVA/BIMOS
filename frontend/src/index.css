@@ -2,6 +2,7 @@
 
 /* ─── Design Tokens ───────────────────────────────────────────────────────── */
 :root {
+  color-scheme: light;
   --bg-page: #f5f5f5;
   --bg-card: #ffffff;
   --bg-card-hover: #eeeeee;
@@ -14,9 +15,11 @@
   --danger: #cc0000;
   --border: #dddddd;
   --border-active: #000000;
+  --ring: rgba(0, 0, 0, 0.25);
 }
 
 [data-theme='dark'] {
+  color-scheme: dark;
   --bg-page: #000000;
   --bg-card: #0a0a0a;
   --bg-card-hover: #111111;
@@ -29,6 +32,7 @@
   --danger: #ff4444;
   --border: #222222;
   --border-active: #ffffff;
+  --ring: rgba(255, 255, 255, 0.4);
 }
 
 @theme {
@@ -48,10 +52,14 @@
   --color-border: var(--border);
   --color-border-active: var(--border-active);
 
-  /* Define standard tailwind-like animations if not present */
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(5px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(24px); }
+    to { opacity: 1; transform: translateX(0); }
   }
 }
 
@@ -68,6 +76,12 @@
   body {
     @apply flex flex-col transition-colors duration-200;
   }
+
+  /* Uniform keyboard focus across every interactive element. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
 }
 
 /* ─── Utilities ──────────────────────────────────────────────────────────── */
@@ -75,6 +89,7 @@
   .custom-scrollbar {
     &::-webkit-scrollbar {
       width: 6px;
+      height: 6px;
     }
     &::-webkit-scrollbar-track {
       background: transparent;
@@ -90,5 +105,9 @@
 
   .animate-fadeIn {
     animation: fadeIn 0.6s ease-out forwards;
+  }
+
+  .animate-slideIn {
+    animation: slideIn 0.25s ease-out forwards;
   }
 }

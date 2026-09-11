@@ -1,6 +1,8 @@
-import pytest
 from pathlib import Path
-from bimos.prediction.fasta import read_sequences, read_yaml_sequences, ensure_yaml, write_boltz_yaml
+
+import pytest
+
+from bimos.prediction.fasta import ensure_yaml, read_sequences, read_yaml_sequences, write_boltz_yaml
 
 
 def test_read_sequences_single(tmp_path: Path) -> None:

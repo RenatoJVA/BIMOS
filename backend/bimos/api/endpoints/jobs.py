@@ -3,12 +3,13 @@ Job management endpoints.
 """
 
 import json
-from typing import Optional
-from fastapi import APIRouter, Query, HTTPException
+
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from bimos.infrastructure.job_store import store
+
 from bimos.api.schemas import JobResponse
-from bimos.api.utils import job_to_response, get_job_or_404
+from bimos.api.utils import get_job_or_404, job_to_response
+from bimos.infrastructure.job_store import store
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
@@ -23,7 +24,7 @@ async def get_job(job_id: str):  # type: ignore[no-untyped-def]
     return job_to_response(get_job_or_404(job_id))
 
 @router.get("/{job_id}/logs")
-async def get_job_logs(job_id: str, tail: Optional[int] = Query(None)):  # type: ignore[no-untyped-def]
+async def get_job_logs(job_id: str, tail: int | None = Query(None)):  # type: ignore[no-untyped-def]
     """Return captured log lines for a job."""
     get_job_or_404(job_id)
     return {"job_id": job_id, "logs": store.get_logs(job_id, tail=tail)}

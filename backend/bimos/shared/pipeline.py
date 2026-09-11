@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
 
 from bimos.config.settings import settings
 

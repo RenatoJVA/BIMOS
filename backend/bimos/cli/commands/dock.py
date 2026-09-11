@@ -1,7 +1,10 @@
 import threading
 from pathlib import Path
+
 import rich_click as click
+
 from bimos.infrastructure.job_store import store
+
 
 @click.command("dock")
 @click.argument("protein_pdb", type=click.Path(exists=True))
@@ -12,10 +15,11 @@ from bimos.infrastructure.job_store import store
 @click.option("--gui", "-g", is_flag=True, help="Open the GUI dashboard for monitoring.")
 def dock(protein_pdb: str, ligands_input: str, dataset: bool, output: str, background: bool, gui: bool) -> None:
     """Run molecular docking pipeline (Protein PDB + Ligands SDF/Dataset -> best poses)."""
-    from bimos.docking import run_docking_pipeline
-    from bimos.infrastructure.chembl_db import export_to_sdf, get_available_datasets
     import os
     import tempfile
+
+    from bimos.docking import run_docking_pipeline
+    from bimos.infrastructure.chembl_db import export_to_sdf, get_available_datasets
 
     ligands_sdf = ligands_input
     if dataset:
@@ -23,17 +27,16 @@ def dock(protein_pdb: str, ligands_input: str, dataset: bool, output: str, backg
         if ligands_input not in datasets:
             click.echo(f"Error: Dataset '{ligands_input}' not found. Available: {', '.join(datasets)}", err=True)
             return
-        
+
         # Create a temp SDF for this session
         temp_dir = Path(tempfile.gettempdir()) / "bimos"
         temp_dir.mkdir(parents=True, exist_ok=True)
         ligands_sdf = str(temp_dir / f"{ligands_input}.sdf")
         click.echo(f"Exporting dataset '{ligands_input}' to temporary file...")
         export_to_sdf(ligands_input, Path(ligands_sdf))
-    else:
-        if not os.path.exists(ligands_sdf):
-            click.echo(f"Error: File '{ligands_sdf}' not found.", err=True)
-            return
+    elif not os.path.exists(ligands_sdf):
+        click.echo(f"Error: File '{ligands_sdf}' not found.", err=True)
+        return
 
     job = store.create(
         kind="dock",

@@ -1,5 +1,4 @@
-from pathlib import Path
-from typing import Callable, Optional
+from collections.abc import Callable
 
 
 class ContainerMock:
@@ -12,11 +11,11 @@ class ContainerMock:
         self,
         command: list[str],
         image: str = "",
-        volumes: Optional[dict[str, str]] = None,
+        volumes: dict[str, str] | None = None,
         workdir: str = "/workspace",
-        on_output: Optional[Callable[[str], None]] = None,
-        env: Optional[dict[str, str]] = None,
-        stdin_text: Optional[str] = None,
+        on_output: Callable[[str], None] | None = None,
+        env: dict[str, str] | None = None,
+        stdin_text: str | None = None,
         timeout: int = 7200,
     ) -> int:
         self.commands_executed.append({
@@ -41,7 +40,7 @@ class ContainerMock:
         dockerfile: str,
         tag: str,
         context: str = ".",
-        on_output: Optional[Callable[[str], None]] = None,
+        on_output: Callable[[str], None] | None = None,
     ) -> int:
         self.commands_executed.append({
             "action": "build_image",

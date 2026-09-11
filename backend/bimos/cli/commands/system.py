@@ -1,6 +1,9 @@
-import rich_click as click
 from pathlib import Path
+
+import rich_click as click
+
 from bimos.infrastructure.job_store import store
+
 
 @click.group("jobs", invoke_without_command=True)
 @click.option("--logs", "-l", default=None, help="Show logs for a specific job ID.")
@@ -86,7 +89,7 @@ def db_query(query: str, dataset: str) -> None:
         if not candidates:
             console.print(f"[yellow]No results found in '{dataset}' for '{query}'.[/yellow]")
             return
-        
+
         table = Table(title=f"Virtual Screening Search: {dataset}", show_header=True, header_style="bold magenta")
         table.add_column("Name", style="cyan", no_wrap=True)
         table.add_column("ChEMBL ID", style="green")
@@ -100,7 +103,7 @@ def db_query(query: str, dataset: str) -> None:
             logp = f"{cand.get('alogp') or 0:.2f}"
             dl = f"{cand.get('drug_likeness') or 0:.2f}"
             table.add_row(name[:30], str(cand.get("chembl_id", "")), mw, logp, dl)
-            
+
         console.print(table)
     else:
         from bimos.infrastructure.database import search_ligands
@@ -108,7 +111,7 @@ def db_query(query: str, dataset: str) -> None:
         if not ligands:
             console.print(f"[yellow]No ligands found matching '{query}'.[/yellow]")
             return
-            
+
         table = Table(title="Database Search", show_header=True, header_style="bold magenta")
         table.add_column("Name", style="cyan", no_wrap=True)
         table.add_column("CID", style="green")
@@ -118,13 +121,13 @@ def db_query(query: str, dataset: str) -> None:
 
         for lig in ligands:
             table.add_row(
-                str(lig.name)[:30], 
-                str(lig.cid), 
-                f"{lig.logp or 0:.2f}", 
-                f"{lig.molar_mass or 0:.2f}", 
+                str(lig.name)[:30],
+                str(lig.cid),
+                f"{lig.logp or 0:.2f}",
+                f"{lig.molar_mass or 0:.2f}",
                 str(lig.source)
             )
-            
+
         console.print(table)
 
 @db.command("export")
@@ -132,16 +135,17 @@ def db_query(query: str, dataset: str) -> None:
 @click.argument("output", type=click.Path())
 def db_export(dataset: str, output: str) -> None:
     """Export a curated dataset to an SDF file for docking."""
-    from bimos.infrastructure.chembl_db import export_to_sdf
     from rich.console import Console
+
+    from bimos.infrastructure.chembl_db import export_to_sdf
     console = Console()
     try:
         out_path = Path(output).resolve()
         if out_path.is_dir():
             out_path = out_path / f"{dataset}.sdf"
-        
+
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         console.print(f"Exporting [cyan]{dataset}[/cyan] to [green]{out_path}[/green]...")
         count = export_to_sdf(dataset, out_path)
         console.print(f"[bold green]✓ Successfully exported {count} compounds.[/bold green]")
@@ -152,8 +156,9 @@ def db_export(dataset: str, output: str) -> None:
 @click.argument("shell", type=click.Choice(["bash", "zsh", "fish"]))
 def completion(shell: str) -> None:
     """Print shell completion script. Source with: eval $(bimos completion bash)"""
+    from click.shell_completion import BashComplete, FishComplete, ZshComplete
+
     from bimos.cli.main import cli
-    from click.shell_completion import BashComplete, ZshComplete, FishComplete
 
     mapping = {"bash": BashComplete, "zsh": ZshComplete, "fish": FishComplete}
     comp = mapping[shell](cli, ctx_args={}, prog_name="bimos", complete_var="_BIMOS_COMPLETE")

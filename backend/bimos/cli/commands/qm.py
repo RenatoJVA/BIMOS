@@ -1,6 +1,9 @@
 import threading
+
 import rich_click as click
+
 from bimos.infrastructure.job_store import store
+
 
 @click.command("qm-orca")
 @click.argument("directory", type=click.Path(exists=True))

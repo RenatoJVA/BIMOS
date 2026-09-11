@@ -1,8 +1,5 @@
-import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from bimos.infrastructure import container as container_module
 

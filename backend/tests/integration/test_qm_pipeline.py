@@ -1,10 +1,9 @@
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
-from bimos.quantum_chemistry.pipeline import OrcaPipeline, GaussianPipeline
 from bimos.quantum_chemistry.itp import update_itp_charges
+from bimos.quantum_chemistry.pipeline import GaussianPipeline, OrcaPipeline
 
 
 def _make_orca_pipeline(charge: int = 0):

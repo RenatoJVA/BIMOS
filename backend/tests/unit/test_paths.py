@@ -1,6 +1,5 @@
-from pathlib import Path
 
-from bimos.shared.paths import PACKAGE_ROOT, SCRIPTS_DIR, CONFIG_DIR, DEFAULTS_DIR, INFRA_CONFIG_DIR
+from bimos.shared.paths import CONFIG_DIR, DEFAULTS_DIR, INFRA_CONFIG_DIR, PACKAGE_ROOT, SCRIPTS_DIR
 
 
 def test_package_root_resolved() -> None:

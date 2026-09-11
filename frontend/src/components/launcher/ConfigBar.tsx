@@ -1,12 +1,7 @@
-import { useEffect, useState } from 'react';
-import {
-  fetchConfigProfiles,
-  FLOW_CONFIG_KEY,
-  type ConfigProfilesResponse,
-} from './config';
+import { useConfigProfiles } from '../../hooks/useQueries';
+import { Chip } from '../ui/Chip';
 
 interface ConfigBarProps {
-  apiBase: string;
   activeFlow: string | null;
   maxResources: boolean;
   onMaxResourcesChange: (value: boolean) => void;
@@ -17,28 +12,21 @@ function effectiveProfile(profile: string, maxResources: boolean): string {
 }
 
 export function ConfigBar({
-  apiBase,
   activeFlow,
   maxResources,
   onMaxResourcesChange,
 }: ConfigBarProps) {
-  const [configs, setConfigs] = useState<ConfigProfilesResponse | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      const data = await fetchConfigProfiles(apiBase, maxResources);
-      if (!cancelled) setConfigs(data);
-    };
-    load();
-    const interval = setInterval(load, 10000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [apiBase, maxResources]);
-
-  const processKey = activeFlow ? FLOW_CONFIG_KEY[activeFlow] : null;
+  const { data: configs } = useConfigProfiles(true);
+  const processKey =
+    activeFlow === 'predict'
+      ? 'boltz'
+      : activeFlow === 'dock'
+        ? 'docking'
+        : activeFlow === 'qm'
+          ? 'orca'
+          : activeFlow === 'md'
+            ? 'md'
+            : null;
   const active = processKey && configs?.processes[processKey];
 
   return (
@@ -49,10 +37,9 @@ export function ConfigBar({
             Pipeline configuration
           </span>
           <span className="text-sm text-text-primary">
-            Jobs use YAML from{' '}
-            <code className="text-accent text-xs bg-bg-page px-1.5 py-0.5 rounded">
-              {configs?.config_dir ?? '~/.bimos/config'}
-            </code>
+            {activeFlow
+              ? 'Job settings read from your local configuration profiles.'
+              : 'Select a pipeline above to see its active configuration.'}
           </span>
         </div>
         <label className="flex items-center gap-2 cursor-pointer select-none text-sm font-mono">
@@ -70,26 +57,22 @@ export function ConfigBar({
         <div className="flex flex-wrap items-center gap-2 text-[0.8rem] font-mono border-t border-border pt-3">
           <span className="text-text-secondary">Active flow:</span>
           <span className="capitalize text-text-primary">{activeFlow}</span>
-          <span
-            className={`px-2 py-0.5 rounded border text-[0.7rem] uppercase tracking-wide ${
+          <Chip
+            variant={
               effectiveProfile(active.profile, maxResources) === 'custom'
-                ? 'border-warning text-warning'
+                ? 'warning'
                 : effectiveProfile(active.profile, maxResources) === 'max'
-                  ? 'border-accent text-accent'
-                  : 'border-border text-text-secondary'
-            }`}
+                  ? 'accent'
+                  : 'default'
+            }
           >
             {effectiveProfile(active.profile, maxResources)}
-          </span>
+          </Chip>
           {active.custom && !maxResources && (
-            <span className="text-text-secondary opacity-80">
-              (edited — not using packaged defaults)
-            </span>
+            <span className="text-text-secondary opacity-80">Edited from defaults</span>
           )}
           {maxResources && (
-            <span className="text-text-secondary opacity-80">
-              (max CPU / memory overrides applied on launch)
-            </span>
+            <span className="text-text-secondary opacity-80">max CPU / memory overrides</span>
           )}
         </div>
       )}
@@ -97,13 +80,9 @@ export function ConfigBar({
       {!activeFlow && configs && (
         <div className="flex flex-wrap gap-2 border-t border-border pt-3">
           {Object.entries(configs.processes).map(([name, info]) => (
-            <span
-              key={name}
-              className="text-[0.65rem] font-mono px-2 py-1 rounded border border-border text-text-secondary"
-              title={info.path}
-            >
+            <Chip key={name} title={info.path} variant={info.custom ? 'warning' : 'default'}>
               {name}: {info.custom ? 'custom' : 'default'}
-            </span>
+            </Chip>
           ))}
         </div>
       )}

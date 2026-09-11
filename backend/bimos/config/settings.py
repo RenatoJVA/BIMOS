@@ -1,10 +1,11 @@
 """Centralized configuration for BIMOS."""
 
 import os
-import sys
 import shutil
+import sys
 from importlib import resources
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 from bimos.shared.paths import DEFAULTS_DIR, PROCESS_CONFIG_FILES

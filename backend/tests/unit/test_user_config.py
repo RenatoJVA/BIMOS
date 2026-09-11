@@ -1,16 +1,13 @@
 from pathlib import Path
-from unittest.mock import patch
-import yaml
 
 from bimos.shared.user_config import (
-    clamp,
-    resolve,
-    is_custom,
-    ensure_user_configs,
-    _max_patch,
-    _deep_merge,
-    user_config_dir,
     ConfigProfile,
+    _deep_merge,
+    clamp,
+    ensure_user_configs,
+    is_custom,
+    resolve,
+    user_config_dir,
 )
 
 
