@@ -3,11 +3,11 @@ PDB-to-PDBQT conversion using Meeko Polymer API.
 Bypasses mk_prepare_receptor.py CLI bugs.
 """
 
-import sys
 import argparse
+import sys
 from pathlib import Path
 
-from meeko import Polymer, PDBQTWriterLegacy
+from meeko import PDBQTWriterLegacy, Polymer
 
 
 def prepare_receptor(pdb_path: str, output_path: str) -> None:

@@ -8,9 +8,10 @@ import logging
 import re
 import shutil
 from collections import defaultdict
+from collections.abc import Callable
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, ClassVar
 
 import yaml
 
@@ -51,7 +52,7 @@ class MolecularDynamicsPipeline(Pipeline):
 
     def _gmx(self, args: list[str], cwd: Path, stdin: str = "") -> int:
         return container.run(
-            command=["gmx"] + args,
+            command=["gmx", *args],
             image=settings.bimos_image,
             volumes={str(cwd): "/workspace"},
             workdir="/workspace",
@@ -65,7 +66,7 @@ class MolecularDynamicsPipeline(Pipeline):
         if not log_path.exists():
             return False
         try:
-            with open(log_path, "r", errors="replace") as f:
+            with open(log_path, errors="replace") as f:
                 for chunk in iter(lambda: f.read(8192), ""):
                     if token in chunk:
                         return True
@@ -77,7 +78,7 @@ class MolecularDynamicsPipeline(Pipeline):
         prefix = "Holo" if is_holo else "Apo"
         if not (cwd / f"min-{comp}.gro").exists() or not (cwd / f"{comp}.top").exists():
             return Stage.PREP
-        
+
         if self._log_contains(cwd, f"min-cg-{comp}.log", "did not converge to Fmax"):
             return Stage.MINIMIZATION
 
@@ -90,7 +91,7 @@ class MolecularDynamicsPipeline(Pipeline):
 
         return Stage.DONE
 
-    EXCLUDED_RESIDUES = {"HOH", "WAT", "NA", "CL", "K", "MG", "CA"}
+    EXCLUDED_RESIDUES: ClassVar[set[str]] = {"HOH", "WAT", "NA", "CL", "K", "MG", "CA"}
 
     def _clean_pdb(self, input_pdb: Path, output_pdb: Path) -> None:
         with open(input_pdb) as fin, open(output_pdb, "w") as fout:
@@ -108,28 +109,32 @@ class MolecularDynamicsPipeline(Pipeline):
 
     def _fix_histidines(self, input_pdb: Path, output_pdb: Path) -> None:
         def classify(atom_lines: list[str]) -> str:
-            names = {l[12:16].strip() for l in atom_lines if l.startswith(("ATOM", "HETATM"))}
-            if any("HEME" in n for n in names): return "HIS1"
-            if "HD1" in names and "HE2" in names: return "HISH"
-            if "HD1" in names: return "HISD"
-            if "HE2" in names: return "HISE"
+            names = {ln[12:16].strip() for ln in atom_lines if ln.startswith(("ATOM", "HETATM"))}
+            if any("HEME" in n for n in names):
+                return "HIS1"
+            if "HD1" in names and "HE2" in names:
+                return "HISH"
+            if "HD1" in names:
+                return "HISD"
+            if "HE2" in names:
+                return "HISE"
             return "HISD"
 
         lines = input_pdb.read_text(errors="replace").splitlines(keepends=True)
         groups = defaultdict(list)
-        for l in lines:
-            if l.startswith(("ATOM", "HETATM")) and l[17:20].strip() == "HIS":
-                groups[(l[21], l[22:26].strip())].append(l)
-        
+        for ln in lines:
+            if ln.startswith(("ATOM", "HETATM")) and ln[17:20].strip() == "HIS":
+                groups[(ln[21], ln[22:26].strip())].append(ln)
+
         types = {k: classify(v) for k, v in groups.items()}
         corrected = []
-        for l in lines:
-            if l.startswith(("ATOM", "HETATM")) and l[17:20].strip() == "HIS":
-                key = (l[21], l[22:26].strip())
+        for ln in lines:
+            if ln.startswith(("ATOM", "HETATM")) and ln[17:20].strip() == "HIS":
+                key = (ln[21], ln[22:26].strip())
                 new = types.get(key, "HISD")
                 self.log(f"Fixing His {key[0]}{key[1]}: HIS -> {new}")
-                l = l[:17] + new.ljust(4)[:4] + l[21:]
-            corrected.append(l)
+                ln = ln[:17] + new.ljust(4)[:4] + ln[21:]
+            corrected.append(ln)
         output_pdb.write_text("".join(corrected))
 
     def _run_minimization(self, comp: str, cwd: Path, is_holo: bool) -> None:
@@ -143,23 +148,25 @@ class MolecularDynamicsPipeline(Pipeline):
             n, converged = 0, False
             while n < self.md_config.max_min_iterations and not converged:
                 g_args = ["grompp", "-f", mdp, "-c", f"{tag}.gro", "-r", f"{tag}.gro", "-p", f"{comp}.top", "-o", f"{tag}.tpr", "-maxwarn", "3"]
-                if idx: g_args += ["-n", idx]
+                if idx:
+                    g_args += ["-n", idx]
                 self._gmx(g_args, cwd)
-                
-                m_args = ["mdrun", "-deffnm", tag, "-v", "-pin", "on", "-pinoffset", "0", "-nice", "0"] + self._get_parallel_args()
+
+                m_args = ["mdrun", "-deffnm", tag, "-v", "-pin", "on", "-pinoffset", "0", "-nice", "0", *self._get_parallel_args()]
                 self._gmx(m_args, cwd)
 
                 new_trr = cwd / f"{tag}.trr"
                 if n == 0:
-                    if new_trr.exists(): new_trr.rename(traj_file)
-                else:
-                    if new_trr.exists() and traj_file.exists():
-                        temp = cwd / "temp_traj.trr"
-                        self._gmx(["trjcat", "-f", str(traj_file), str(new_trr), "-o", str(temp), "-cat"], cwd)
-                        temp.rename(traj_file)
-                        new_trr.unlink(missing_ok=True)
+                    if new_trr.exists():
+                        new_trr.rename(traj_file)
+                elif new_trr.exists() and traj_file.exists():
+                    temp = cwd / "temp_traj.trr"
+                    self._gmx(["trjcat", "-f", str(traj_file), str(new_trr), "-o", str(temp), "-cat"], cwd)
+                    temp.rename(traj_file)
+                    new_trr.unlink(missing_ok=True)
 
-                for bak in cwd.glob(f"*#*{tag}*"): bak.unlink(missing_ok=True)
+                for bak in cwd.glob(f"*#*{tag}*"):
+                    bak.unlink(missing_ok=True)
                 converged = not self._log_contains(cwd, log_f, "did not converge to Fmax")
                 n += 1
 
@@ -169,32 +176,40 @@ class MolecularDynamicsPipeline(Pipeline):
 
         if not (cwd / f"{tag}.tpr").exists():
             g_args = ["grompp", "-f", mdp, "-v", "-c", f"{p_tag}.gro", "-r", f"{p_tag}.gro", "-p", f"{comp}.top", "-o", f"{tag}.tpr", "-maxwarn", "3"]
-            if idx: g_args += ["-n", idx]
+            if idx:
+                g_args += ["-n", idx]
             self._gmx(g_args, cwd)
 
         j = 1
-        while (cwd / f"{tag}_{j}.cpt").exists(): j += 1
+        while (cwd / f"{tag}_{j}.cpt").exists():
+            j += 1
 
         finished, fails = False, 0
         while not finished:
             cpt = f"{tag}_{j}.cpt"
-            m_args = ["mdrun", "-deffnm", tag, "-cpo", cpt, "-nice", "0", "-v", "-maxh", "6", "-cpt", "1", "-pin", "on", "-pinoffset", "0"] + self._get_parallel_args()
-            if settings.use_gpu: m_args += ["-nb", "gpu", "-pme", "gpu", "-bonded", "gpu"]
-            if j > 1: m_args += ["-cpi", f"{tag}_{j-1}.cpt"]
+            m_args = ["mdrun", "-deffnm", tag, "-cpo", cpt, "-nice", "0", "-v", "-maxh", "6", "-cpt", "1", "-pin", "on", "-pinoffset", "0", *self._get_parallel_args()]
+            if settings.use_gpu:
+                m_args += ["-nb", "gpu", "-pme", "gpu", "-bonded", "gpu"]
+            if j > 1:
+                m_args += ["-cpi", f"{tag}_{j-1}.cpt"]
 
             rc = self._gmx(m_args, cwd)
             if rc != 0 and not (cwd / cpt).exists():
                 fails += 1
-                if fails >= 3: raise RuntimeError(f"mdrun for {phase} failed 3 times.")
+                if fails >= 3:
+                    raise RuntimeError(f"mdrun for {phase} failed 3 times.")
                 continue
-            else: fails = 0
+            else:
+                fails = 0
 
             if (cwd / f"{tag}.gro").exists() and self._log_contains(cwd, f"{tag}.log", "Finished mdrun"):
                 finished = True
             else:
                 j += 1
-                if j > 50: break
-        for bak in cwd.glob("#*#"): bak.unlink(missing_ok=True)
+                if j > 50:
+                    break
+        for bak in cwd.glob("#*#"):
+            bak.unlink(missing_ok=True)
 
     def run(  # type: ignore[override]
         self,
@@ -206,21 +221,23 @@ class MolecularDynamicsPipeline(Pipeline):
         is_holo = ligand_gro is not None and ligand_itp is not None
         prefix = "Holo" if is_holo else "Apo"
         comp = f"{prefix}-{pdb.stem}"
-        
+
         # Override output_dir with job-specific one
         cwd = self.output_dir / comp
         cwd.mkdir(parents=True, exist_ok=True)
 
         shutil.copy2(pdb, cwd / f"{pdb.stem}.pdb")
         if is_holo:
-            assert ligand_gro is not None and ligand_itp is not None
+            if ligand_gro is None or ligand_itp is None:
+                raise ValueError("Holo pipeline requires both ligand_gro and ligand_itp")
             shutil.copy2(ligand_gro, cwd / "ligand.gro")
             shutil.copy2(ligand_itp, cwd / "ligand.itp")
 
         mdps = self._default_mdps(is_holo)
         for name, content in mdps.items():
             mdp_path = cwd / name
-            if not mdp_path.exists(): mdp_path.write_text(content)
+            if not mdp_path.exists():
+                mdp_path.write_text(content)
 
         stage = self._detect_stage(cwd, comp, is_holo)
         self.log(f"Starting {prefix} pipeline at stage: {stage} (profile={self.md_config.profile})")
@@ -240,7 +257,7 @@ class MolecularDynamicsPipeline(Pipeline):
                 self._build_complex(cwd / "prot-pdb2gmx.gro", cwd / "ligand.gro", resname, cwd / f"{comp}-raw.gro")
                 self._gmx(["genrestr", "-f", "ligand.gro", "-o", "ligand-posre.itp", "-fc", "1000", "1000", "1000"], cwd, f"{resname}\n")
                 self._inject_posres(cwd / f"{comp}.top", "ligand")
-                self._gmx(["editconf", "-f", f"{comp}-raw.gro", "-o", f"pre-{comp}-solv.gro", "-bt", "cubic", "-box"] + box, cwd)
+                self._gmx(["editconf", "-f", f"{comp}-raw.gro", "-o", f"pre-{comp}-solv.gro", "-bt", "cubic", "-box", *box], cwd)
                 self._gmx(["solvate", "-cp", f"pre-{comp}-solv.gro", "-cs", self.md_config.solvent_gro, "-o", f"min-{comp}-solv.gro", "-p", f"{comp}.top"], cwd)
                 self._gmx(["grompp", "-f", "holo-ions.mdp", "-c", f"min-{comp}-solv.gro", "-p", f"{comp}.top", "-o", f"min-{comp}.tpr", "-maxwarn", "3"], cwd)
                 self._gmx(["genion", "-s", f"min-{comp}.tpr", "-o", f"min-{comp}.gro", "-p", f"{comp}.top", "-neutral", "-conc", self.md_config.ion_concentration], cwd, "SOL\n")
@@ -269,14 +286,18 @@ class MolecularDynamicsPipeline(Pipeline):
             self.log("Phase: ANALYSIS")
             tag, ndx = f"sdm-{comp}", ("index.ndx" if is_holo else None)
             conv = ["trjconv", "-f", f"{tag}.xtc", "-s", f"{tag}.tpr", "-o", f"{tag}-noPBC.xtc", "-pbc", "nojump", "-center", "-tu", "ns"]
-            if ndx: conv += ["-n", ndx]
+            if ndx:
+                conv += ["-n", ndx]
             self._gmx(conv, cwd, "1 0\n")
 
             for tool, out, inp in [("rms", f"{prefix}-{comp}-rmsd.xvg", "4 4\n"), ("rmsf", f"{prefix}-{comp}-rmsf.xvg", "1\n"), ("gyrate", f"{prefix}-{comp}-gyrate.xvg", "1\n"), ("hbond", f"{prefix}-{comp}-hbnum.xvg", "1\n1\n"), ("sasa", f"{prefix}-{comp}-sasa.xvg", "1\n")]:
                 args = [tool, "-f", f"{tag}-noPBC.xtc", "-s", f"{tag}.tpr", ("-num" if tool == "hbond" else "-o"), out]
-                if tool == "rmsf": args += ["-res", "yes", "-fit", "yes"]
-                if tool == "sasa": args += ["-or", f"{comp}-sasa-res.xvg", "-tv", f"{comp}-sasa-vol.xvg"]
-                if ndx: args += ["-n", ndx]
+                if tool == "rmsf":
+                    args += ["-res", "yes", "-fit", "yes"]
+                if tool == "sasa":
+                    args += ["-or", f"{comp}-sasa-res.xvg", "-tv", f"{comp}-sasa-vol.xvg"]
+                if ndx:
+                    args += ["-n", ndx]
                 self._gmx(args, cwd, inp)
 
         return {"status": "completed", "output_dir": str(cwd)}
@@ -288,12 +309,15 @@ class MolecularDynamicsPipeline(Pipeline):
     def _patch_itp(self, itp: Path) -> None:
         lines = itp.read_text(errors="replace").splitlines(keepends=True)
         in_block, patched = False, []
-        for l in lines:
-            if l.startswith(";---"): in_block = True
+        for ln in lines:
+            if ln.startswith(";---"):
+                in_block = True
             if in_block:
-                if not l.startswith(";"): l = ";" + l
-                if re.match(r"^\s*[0-9]", l.lstrip(";")): in_block = False
-            patched.append(l)
+                if not ln.startswith(";"):
+                    ln = ";" + ln
+                if re.match(r"^\s*[0-9]", ln.lstrip(";")):
+                    in_block = False
+            patched.append(ln)
         itp.write_text("".join(patched))
 
     def _inject_topology(self, top: Path, itp: Path) -> None:
@@ -318,9 +342,9 @@ class MolecularDynamicsPipeline(Pipeline):
 
     def _build_complex(self, prot: Path, lig: Path, res: str, out: Path) -> None:
         p_lines = prot.read_text().splitlines(keepends=True)
-        l_lines = [l for l in lig.read_text().splitlines(keepends=True) if res in l]
+        l_lines = [ln for ln in lig.read_text().splitlines(keepends=True) if res in ln]
         n = len(p_lines) - 3 + len(l_lines)
-        new = [p_lines[0], f" {n}\n"] + p_lines[2:-1] + l_lines + [p_lines[-1]]
+        new = [p_lines[0], f" {n}\n", *p_lines[2:-1], *l_lines, p_lines[-1]]
         out.write_text("".join(new))
 
     def _get_box(self, gro: Path) -> list[str]:

@@ -1,6 +1,9 @@
 import threading
+
 import rich_click as click
+
 from bimos.infrastructure.job_store import store
+
 
 @click.command("workflow")
 @click.option("--protein", "-p", "pdb_file", type=click.Path(exists=True), required=True, help="Input protein PDB file.")
@@ -15,10 +18,10 @@ def workflow(pdb_file: str, ligand_gro: str, ligand_itp: str, output: str, backg
 
     is_holo = bool(ligand_gro and ligand_itp)
     kind = "workflow-holo" if is_holo else "workflow-apo"
-    
+
     job = store.create(
-        kind=kind, 
-        meta={"pdb": pdb_file, "gro": ligand_gro, "itp": ligand_itp}, 
+        kind=kind,
+        meta={"pdb": pdb_file, "gro": ligand_gro, "itp": ligand_itp},
         output_dir=output or ""
     )
     click.echo(f"Job ID: {job.id}")

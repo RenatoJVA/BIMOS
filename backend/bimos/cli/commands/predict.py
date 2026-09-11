@@ -1,6 +1,9 @@
 import threading
+
 import rich_click as click
+
 from bimos.infrastructure.job_store import store
+
 
 def _run_boltz(
     input_file: str,

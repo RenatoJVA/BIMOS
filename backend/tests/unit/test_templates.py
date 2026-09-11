@@ -1,7 +1,5 @@
 from pathlib import Path
 
-import pytest
-
 from bimos.shared.templates import render_template
 
 

@@ -5,15 +5,19 @@ Uses SQLAlchemy + PostgreSQL.
 Provides: init_db, seed_ligands, search_ligands
 """
 
-import random
 import logging
-from typing import Optional
+import random
 
 from sqlalchemy import (
-    Column, Integer, String, Float, Index,
-    create_engine, or_,
+    Column,
+    Float,
+    Index,
+    Integer,
+    String,
+    create_engine,
+    or_,
 )
-from sqlalchemy.orm import sessionmaker, DeclarativeBase, Session
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from bimos.config.settings import settings
 
@@ -131,7 +135,7 @@ def seed_ligands() -> int:
 
 def search_ligands(
     query: str,
-    source: Optional[str] = None,
+    source: str | None = None,
     limit: int = 50,
 ) -> list[Ligand]:
     """

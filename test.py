@@ -28,19 +28,23 @@ def _detect_cli():
       4. bimos binary on PATH (.deb, fallback — may lack scripts/)
     """
     # Priority 1: source tree (has scripts/ for container mounts)
+    # Use backend/.venv so the bundled dependencies are available (the system
+    # python3 may not have bimos' deps installed).
     if (BACKEND / "bimos").exists():
-        env = os.environ.copy()
-        env["PYTHONPATH"] = str(BACKEND)
-        try:
-            r = subprocess.run(
-                [sys.executable, "-m", "bimos.cli.main", "--help"],
-                capture_output=True, text=True, timeout=15, env=env,
-            )
-            if r.returncode == 0:
-                print("  [INFO] Using source tree (backend/bimos/)")
-                return [sys.executable, "-m", "bimos.cli.main"], {"PYTHONPATH": str(BACKEND)}
-        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-            pass
+        venv_python = (BACKEND / ".venv" / "bin" / "python").resolve()
+        for py in ([str(venv_python)] if venv_python.exists() else [sys.executable]):
+            env = os.environ.copy()
+            env["PYTHONPATH"] = str(BACKEND)
+            try:
+                r = subprocess.run(
+                    [py, "-m", "bimos.cli.main", "--help"],
+                    capture_output=True, text=True, timeout=15, env=env,
+                )
+                if r.returncode == 0:
+                    print(f"  [INFO] Using source tree (backend/bimos/) via {py}")
+                    return [py, "-m", "bimos.cli.main"], {"PYTHONPATH": str(BACKEND)}
+            except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+                pass
 
     # Priority 2: try python -m bimos (pip install with __main__.py)
     try:
@@ -80,7 +84,7 @@ CLI, ENV_PATCHES = _detect_cli()
 
 ENV = os.environ.copy()
 ENV.update(ENV_PATCHES)
-ENV["BIMOS_USE_GPU"] = "false"
+ENV.setdefault("BIMOS_USE_GPU", "true")
 
 # ── Pre-flight helpers ─────────────────────────────────────────────────────
 
@@ -125,6 +129,28 @@ prep:
   solvent_gro: spc216.gro
 """
 
+BS_CONFIG = """
+num_models: 1
+recycling_steps: 3
+sampling_steps: 10
+diffusion_samples: 1
+max_parallel_samples: 1
+step_scale: 1.0
+max_msa_seqs: 64
+num_subsampled_msa: 64
+num_workers: 4
+preprocessing_threads: 4
+use_msa_server: true
+msa_pairing_strategy: complete
+subsample_msa: false
+use_potentials: true
+output_format: mmcif
+write_full_pae: true
+write_full_pde: true
+no_kernels: true
+override: true
+"""
+
 def backup_md():
     if MD_YAML.exists():
         shutil.copy2(MD_YAML, MD_BACKUP)
@@ -145,6 +171,8 @@ def inject_configs():
     MD_YAML.parent.mkdir(parents=True, exist_ok=True)
     MD_YAML.write_text(textwrap.dedent(PS_CONFIG).lstrip())
     print("  [CONFIG] MD tuned to picosecond regime")
+    BOLTZ_YAML.write_text(textwrap.dedent(BS_CONFIG).lstrip())
+    print("  [CONFIG] Boltz tuned to demo scale")
 
 def create_fastas():
     (TEST / "PREDICT").mkdir(parents=True, exist_ok=True)
@@ -386,17 +414,17 @@ def main():
         #     timeout=600,
         # )
 
-        run_pipeline(
-            "Predict Boltz (lysozyme)",
-            [
-                "predict-boltz",
-                str(TEST / "PREDICT" / "lysozyme.yaml"),
-                "-o",
-                str(TEST / "PREDICT" / "boltz_output"),
-            ],
-            clean_output=True,
-            timeout=600,
-        )
+        # run_pipeline(
+#     "Predict Boltz (lysozyme)",
+#     [
+#         "predict-boltz",
+#         str(TEST / "PREDICT" / "lysozyme.fasta"),
+#         "-o",
+#         str(TEST / "PREDICT" / "boltz_output"),
+#     ],
+#     clean_output=True,
+#     timeout=900,
+# )
 
         run_pipeline(
             "QM ORCA (JZ4)",

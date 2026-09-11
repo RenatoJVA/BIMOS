@@ -1,7 +1,7 @@
 
-import sqlite3
-import logging
 import functools
+import logging
+import sqlite3
 from contextlib import closing
 from pathlib import Path
 from typing import Any
@@ -46,7 +46,7 @@ def export_to_sdf(dataset_name: str, output_path: Path) -> int:
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
             tables = cursor.fetchone()
             if not tables:
-                raise RuntimeError(f"No tables found in {db_path}")
+                raise RuntimeError(f"No tables found in {db_path}") from None
             table_name = tables[0]
             cursor.execute(
                 f"SELECT chembl_id, pref_name, canonical_smiles FROM {table_name}"  # nosec - table_name from sqlite_master

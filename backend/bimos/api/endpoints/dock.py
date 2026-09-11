@@ -2,7 +2,7 @@
 Molecular docking endpoints.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, File, Form, UploadFile
 
@@ -20,11 +20,11 @@ async def dock_job(  # type: ignore[no-untyped-def]
     protein: UploadFile = File(...),
     ligands: UploadFile = File(...),
     max_resources: bool = Form(False),
-    times: Optional[int] = Form(None),
-    exhaustiveness: Optional[int] = Form(None),
-    num_modes: Optional[int] = Form(None),
-    margin: Optional[float] = Form(None),
-    cpu_per_job: Optional[int] = Form(None),
+    times: int | None = Form(None),
+    exhaustiveness: int | None = Form(None),
+    num_modes: int | None = Form(None),
+    margin: float | None = Form(None),
+    cpu_per_job: int | None = Form(None),
 ):
     """Submit a docking job. Parameters omitted use ``~/.bimos/config/docking.yaml``."""
     safe_protein = safe_filename(protein.filename)

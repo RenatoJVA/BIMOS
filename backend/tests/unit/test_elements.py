@@ -1,6 +1,6 @@
 import pytest
 
-from bimos.quantum_chemistry.elements import atomic_number, ATOMIC_NUMBER
+from bimos.quantum_chemistry.elements import ATOMIC_NUMBER, atomic_number
 
 
 def test_atomic_number_hydrogen() -> None:

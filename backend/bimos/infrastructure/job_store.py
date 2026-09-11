@@ -7,15 +7,16 @@ This allows multiple CLI processes and the GUI server to share the same state.
 import logging
 import os
 import threading
-from datetime import datetime, timezone
+from contextvars import ContextVar
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel
-from contextvars import ContextVar
 
 from bimos.config.settings import settings
+from bimos.infrastructure import cancellation
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +36,12 @@ class JobRecord(BaseModel):
     kind: str
     status: JobStatus
     created_at: str
-    started_at: Optional[str] = None
-    finished_at: Optional[str] = None
-    error: Optional[str] = None
-    output_dir: Optional[str] = None
+    started_at: str | None = None
+    finished_at: str | None = None
+    error: str | None = None
+    output_dir: str | None = None
     meta: dict[str, Any] = {}
-    results: Optional[Any] = None
+    results: Any | None = None
 
 
 class FileJobStore:
@@ -50,8 +51,8 @@ class FileJobStore:
         self._lock = threading.Lock()
         self._log_buffers: dict[str, list[str]] = {}
         self._log_buffer_size = 64
-        self._list_cache: Optional[list[JobRecord]] = None
-        self._list_cache_stamp: Optional[tuple[int, int]] = None
+        self._list_cache: list[JobRecord] | None = None
+        self._list_cache_stamp: tuple[int, int] | None = None
 
     def _path(self, job_id: str) -> Path:
         return self.jobs_dir / f"{job_id}.json"
@@ -66,7 +67,7 @@ class FileJobStore:
         tmp.rename(p)
         self._list_cache = None
 
-    def _load(self, job_id: str) -> Optional[JobRecord]:
+    def _load(self, job_id: str) -> JobRecord | None:
         p = self._path(job_id)
         if not p.exists():
             return None
@@ -83,7 +84,7 @@ class FileJobStore:
             id=job_id,
             kind=kind,
             status=JobStatus.PENDING,
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
             meta=meta or {},
             output_dir=output_dir,
         )
@@ -92,7 +93,7 @@ class FileJobStore:
         self._log_path(job_id).touch(exist_ok=True)
         return job
 
-    def get(self, job_id: str) -> Optional[JobRecord]:
+    def get(self, job_id: str) -> JobRecord | None:
         return self._load(job_id)
 
     def start(self, job_id: str) -> None:
@@ -102,7 +103,7 @@ class FileJobStore:
             if job is None or job.status != JobStatus.PENDING:
                 return
             job.status = JobStatus.RUNNING
-            job.started_at = datetime.now(timezone.utc).isoformat()
+            job.started_at = datetime.now(UTC).isoformat()
             self._save_unlocked(job)
 
     def complete(self, job_id: str, exit_code: int = 0, results: Any = None) -> None:
@@ -111,7 +112,7 @@ class FileJobStore:
             if job is None:
                 return
             job.status = JobStatus.COMPLETED if exit_code == 0 else JobStatus.FAILED
-            job.finished_at = datetime.now(timezone.utc).isoformat()
+            job.finished_at = datetime.now(UTC).isoformat()
             if exit_code == 0:
                 job.results = results
             else:
@@ -125,7 +126,7 @@ class FileJobStore:
             if job is None:
                 return
             job.status = JobStatus.FAILED
-            job.finished_at = datetime.now(timezone.utc).isoformat()
+            job.finished_at = datetime.now(UTC).isoformat()
             job.error = error
             self._save_unlocked(job)
         self.flush(job_id)
@@ -158,7 +159,7 @@ class FileJobStore:
             if buf:
                 self._flush_buffer(job_id, buf)
 
-    def get_logs(self, job_id: str, tail: Optional[int] = None) -> list[str]:
+    def get_logs(self, job_id: str, tail: int | None = None) -> list[str]:
         self.flush(job_id)
         p = self._log_path(job_id)
         if not p.exists():
@@ -233,13 +234,17 @@ class FileJobStore:
             if not job:
                 return False
             job.status = JobStatus.CANCELED
-            job.finished_at = datetime.now(timezone.utc).isoformat()
+            job.finished_at = datetime.now(UTC).isoformat()
             job.error = "Canceled by user"
             self._save_unlocked(job)
-        
+
+        # Signal any in-flight pipeline code so it aborts promptly.
+        cancellation.request(job_id)
+
         # Clean up any running containers for this job
         try:
             import subprocess
+
             from bimos.infrastructure.container import _detect_runtime, _get_proc_env
             runtime = _detect_runtime()
             proc_env = _get_proc_env()
@@ -249,10 +254,10 @@ class FileJobStore:
             )
             cids = res.stdout.strip().split()
             if cids:
-                subprocess.run([runtime, "rm", "-f"] + cids, env=proc_env)
+                subprocess.run([runtime, "rm", "-f", *cids], env=proc_env)
         except Exception:
             pass
-            
+
         return True
 
     def delete(self, job_id: str) -> bool:
@@ -267,10 +272,12 @@ class FileJobStore:
                 log_p.unlink()
             self._log_buffers.pop(job_id, None)
             self._list_cache = None
-                
+        cancellation.unregister(job_id)
+
         # Clean up any running containers for this job
         try:
             import subprocess
+
             from bimos.infrastructure.container import _detect_runtime, _get_proc_env
             runtime = _detect_runtime()
             proc_env = _get_proc_env()
@@ -280,7 +287,7 @@ class FileJobStore:
             )
             cids = res.stdout.strip().split()
             if cids:
-                subprocess.run([runtime, "rm", "-f"] + cids, env=proc_env)
+                subprocess.run([runtime, "rm", "-f", *cids], env=proc_env)
         except Exception:
             pass
 

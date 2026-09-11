@@ -1,15 +1,15 @@
 """BIMOS FastAPI application server and Desktop GUI runner."""
 
 import os
-import sys
-import time
-import threading
-import subprocess
-import uvicorn
-from pathlib import Path
 import socket
-from typing import TypedDict
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
 from urllib.parse import urlparse
+
+import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -24,36 +24,14 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    # The UI is served from the same origin; CORS only needs to accept the
+    # native desktop wrapper (pywebview/QtWebEngine) hitting localhost.
+    allow_origin_regex=r"^https?://(127\.0\.0\.1|localhost)(:\d+)?$",
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.include_router(router)
-
-
-class _ThemeCache(TypedDict):
-    value: str | None
-    ts: float
-
-
-# OS theme detection is polled by the frontend; cache it briefly so we don't
-# spawn up to 5 subprocesses on every request.
-_theme_cache: _ThemeCache = {"value": None, "ts": 0.0}
-_THEME_TTL = 5.0
-
-
-@app.get("/api/v1/system/theme")
-async def get_system_theme():  # type: ignore[no-untyped-def]
-    """Endpoint for the frontend to poll the current OS theme."""
-    now = time.monotonic()
-    cached = _theme_cache
-    if cached["value"] is not None and now - cached["ts"] < _THEME_TTL:
-        return {"theme": cached["value"]}
-    is_dark = await _detect_system_dark_mode_async()
-    cached["value"] = "dark" if is_dark else "light"
-    cached["ts"] = now
-    return {"theme": cached["value"]}
 
 
 # Resolve path to UI assets (works natively and inside Nuitka)
@@ -69,13 +47,6 @@ else:
     @app.get("/")
     async def root():  # type: ignore[no-untyped-def]
         return {"name": "BIMOS", "version": "0.1.0", "docs": "/docs", "ui": "Not compiled"}
-
-
-async def _detect_system_dark_mode_async() -> bool:
-    """Run blocking OS theme detection off the event loop."""
-    import asyncio
-
-    return await asyncio.to_thread(_detect_system_dark_mode)
 
 
 def _detect_system_dark_mode() -> bool:
@@ -234,7 +205,7 @@ def start_server(
 
     # Ensure Nuitka traces win32 (winforms imports it; the pywebview plugin omits it).
     if sys.platform == "win32":
-        import webview.platforms.win32  # noqa: F401
+        import webview.platforms.win32
 
     # Linux uses Qt/WebEngine; Windows uses WinForms + WebView2; macOS uses Cocoa.
     desktop_gui = "qt" if sys.platform.startswith("linux") else None
@@ -263,7 +234,7 @@ def start_server(
     sep = "&" if "?" in target_url else "?"
     url = f"{target_url}{sep}systemTheme={system_theme}"
 
-    webview.create_window(
+    window = webview.create_window(
         "BIMOS Dashboard",
         url,
         width=1200,

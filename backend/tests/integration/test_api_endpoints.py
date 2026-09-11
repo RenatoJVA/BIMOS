@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -19,10 +18,10 @@ def test_health_endpoint(client: TestClient) -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_system_theme(client: TestClient) -> None:
+def test_system_theme_removed(client: TestClient) -> None:
+    # /system/theme was removed: the frontend resolves themes via matchMedia.
     response = client.get("/api/v1/system/theme")
-    assert response.status_code == 200
-    assert "theme" in response.json()
+    assert response.status_code == 404
 
 
 def test_list_jobs_empty(client: TestClient) -> None:
@@ -150,18 +149,10 @@ def test_system_stats(client: TestClient, monkeypatch) -> None:
     assert "memory" in data
 
 
-def test_ligands_endpoint_no_db(client: TestClient, monkeypatch) -> None:
-    with patch("bimos.infrastructure.database.search_ligands", side_effect=Exception("DB unavailable")):
-        response = client.get("/api/v1/ligands?q=test")
-        assert response.status_code == 503
-
-
-def test_ligands_endpoint_empty(client: TestClient, monkeypatch) -> None:
-    with patch("bimos.infrastructure.database.search_ligands", return_value=[]):
-        response = client.get("/api/v1/ligands?q=nonexistent")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["count"] == 0
+def test_ligands_endpoint_removed(client: TestClient) -> None:
+    # /ligands was removed; ligand search is only exposed via the CLI.
+    response = client.get("/api/v1/ligands?q=test")
+    assert response.status_code == 404
 
 
 def test_dock_endpoint_validation(client: TestClient, tmp_path: Path, monkeypatch) -> None:
@@ -182,18 +173,17 @@ def test_dock_endpoint_validation(client: TestClient, tmp_path: Path, monkeypatc
     fake_store.create.return_value = fake_job
     fake_store.get.return_value = fake_job
 
-    with patch("bimos.api.endpoints.dock.store", fake_store):
-        with patch("bimos.api.utils.store", fake_store):
-            response = client.post(
-                "/api/v1/dock",
-                files={
-                    "protein": ("test.pdb", b"ATOM data", "application/octet"),
-                    "ligands": ("ligands.sdf", b"ligand data", "chemical/x-mdl-sdfile"),
-                },
-            )
-            assert response.status_code == 202
-            data = response.json()
-            assert data["id"] == "dock789"
+    with patch("bimos.api.endpoints.dock.store", fake_store), patch("bimos.api.utils.store", fake_store):
+        response = client.post(
+            "/api/v1/dock",
+            files={
+                "protein": ("test.pdb", b"ATOM data", "application/octet"),
+                "ligands": ("ligands.sdf", b"ligand data", "chemical/x-mdl-sdfile"),
+            },
+        )
+        assert response.status_code == 202
+        data = response.json()
+        assert data["id"] == "dock789"
 
 
 def test_config_profiles_preview_max(client: TestClient, tmp_path: Path, monkeypatch) -> None:

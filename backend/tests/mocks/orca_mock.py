@@ -1,6 +1,4 @@
-import tempfile
 from pathlib import Path
-from typing import Optional
 
 
 class OrcaMock:
@@ -12,8 +10,8 @@ class OrcaMock:
     def run_orca(
         self,
         inp_path: Path,
-        out_path: Optional[Path] = None,
-        cwd: Optional[Path] = None,
+        out_path: Path | None = None,
+        cwd: Path | None = None,
     ) -> int:
         self.inputs_written.append(inp_path)
         if out_path is None:
@@ -29,8 +27,8 @@ class OrcaMock:
     def run_gaussian(
         self,
         gjf_path: Path,
-        log_path: Optional[Path] = None,
-        cwd: Optional[Path] = None,
+        log_path: Path | None = None,
+        cwd: Path | None = None,
     ) -> int:
         self.inputs_written.append(gjf_path)
         if log_path is None:
@@ -44,7 +42,7 @@ class OrcaMock:
         return self.return_code
 
     def _default_output(self, name: str) -> str:
-        return f"""
+        return """
 ORCA TERMINATED NORMALLY
 HIRSHFELD ANALYSIS
   1 C   0.1234
@@ -56,7 +54,7 @@ TOTAL CHARGE: 0.0000
         """.strip()
 
     def _default_gaussian_output(self, name: str) -> str:
-        return f"""
+        return """
 Normal termination of Gaussian
 Hirshfeld charges, spin densities
   1    C    0.1234

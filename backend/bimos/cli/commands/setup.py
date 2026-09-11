@@ -1,8 +1,11 @@
 import sys
 from pathlib import Path
+
 import rich_click as click
+
 from bimos.config.settings import settings
 from bimos.shared.paths import PROCESS_CONFIG_FILES
+
 
 def _print(msg: str) -> None:
     click.echo(msg)
@@ -12,7 +15,7 @@ def _print(msg: str) -> None:
 @click.option("--config-only", is_flag=True, help="Only create/update user YAML configs in ~/.bimos/config/.")
 def setup(force: bool, config_only: bool) -> None:
     """Build the container image and bootstrap user configuration."""
-    from bimos.shared.user_config import ensure_user_configs, is_custom, user_config_dir
+    from bimos.shared.user_config import is_custom, user_config_dir
 
     settings.ensure_dirs()
     config_dir = user_config_dir()

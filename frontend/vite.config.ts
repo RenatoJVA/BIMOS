@@ -8,7 +8,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id: string) {
-          if (id.includes('node_modules/react')) return 'vendor';
+          if (id.includes('node_modules/react') || id.includes('@tanstack/react-query')) return 'vendor';
         },
       },
     },

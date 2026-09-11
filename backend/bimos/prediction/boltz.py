@@ -44,6 +44,8 @@ class BoltzPipeline(Pipeline):
             f"/workspace/{yaml_name}",
             "--out_dir",
             model_dir,
+            "--cache",
+            "/workspace/.boltz_cache",
             "--recycling_steps",
             str(cfg["recycling_steps"]),
             "--sampling_steps",
@@ -81,6 +83,27 @@ class BoltzPipeline(Pipeline):
             args.append("--no_kernels")
         return args
 
+    def _preflight_gpu(self) -> None:
+        """Verify the GPU is visible inside the container before starting.
+
+        Boltz on CPU is impractically slow, so we fail fast with a clear
+        diagnostic instead of letting the job time out.
+        """
+        cmd = ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"]
+        rc = container.run(
+            command=cmd,
+            image=settings.bimos_image,
+            volumes={str(self.output_dir): "/workspace"},
+            workdir="/workspace",
+            on_output=self.on_output,
+        )
+        if rc != 0:
+            raise RuntimeError(
+                "GPU not available inside the container for Boltz. "
+                "Ensure NVIDIA drivers + CDI are configured and pass the GPU "
+                "device (e.g. `--device nvidia.com/gpu=all` with podman)."
+            )
+
     def run(  # type: ignore[override]
         self,
         fasta_path: str,
@@ -101,7 +124,9 @@ class BoltzPipeline(Pipeline):
         cache_dir = settings.cache_path / "boltz"
         cache_dir.mkdir(parents=True, exist_ok=True)
         volumes = {str(job_dir): "/workspace", str(cache_dir): "/workspace/.boltz_cache"}
-        env = {"BOLTZ_CACHE_DIR": "/workspace/.boltz_cache"}
+        env = {"BOLTZ_CACHE": "/workspace/.boltz_cache", "BOLTZ_CACHE_DIR": "/workspace/.boltz_cache"}
+
+        self._preflight_gpu()
 
         self.log(f"Starting Boltz prediction ({num_models} models)")
         for index in range(1, num_models + 1):

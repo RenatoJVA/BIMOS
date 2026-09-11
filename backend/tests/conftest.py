@@ -1,6 +1,5 @@
 import json
 import os
-import shutil
 from pathlib import Path
 from unittest.mock import patch
 
@@ -117,15 +116,14 @@ def mock_subprocess():
     mock.returncode = 0
     mock.stdout = "mock output"
     mock.stderr = ""
-    with patch("subprocess.run", return_value=mock):
-        with patch("subprocess.Popen") as mock_popen:
-            proc_mock = MagicMock()
-            proc_mock.stdout = ["line1\n", "line2\n"]
-            proc_mock.wait.return_value = 0
-            proc_mock.returncode = 0
-            proc_mock.pid = 12345
-            mock_popen.return_value = proc_mock
-            yield mock_popen
+    with patch("subprocess.run", return_value=mock), patch("subprocess.Popen") as mock_popen:
+        proc_mock = MagicMock()
+        proc_mock.stdout = ["line1\n", "line2\n"]
+        proc_mock.wait.return_value = 0
+        proc_mock.returncode = 0
+        proc_mock.pid = 12345
+        mock_popen.return_value = proc_mock
+        yield mock_popen
 
 
 @pytest.fixture

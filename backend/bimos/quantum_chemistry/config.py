@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 from bimos.config.settings import settings
 from bimos.shared.user_config import clamp, resolve

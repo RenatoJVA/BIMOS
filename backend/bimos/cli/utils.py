@@ -4,10 +4,10 @@ import json
 import os
 import sys
 import threading
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import click
-
 
 _output_format: str = "text"
 
@@ -70,7 +70,7 @@ def daemonize(target: Callable[[], None]) -> None:
         os.setsid()
         if os.fork() > 0:
             sys.exit(0)
-        with open(os.devnull, "r") as f:
+        with open(os.devnull) as f:
             os.dup2(f.fileno(), sys.stdin.fileno())
         with open(os.devnull, "a+") as f:
             os.dup2(f.fileno(), sys.stdout.fileno())

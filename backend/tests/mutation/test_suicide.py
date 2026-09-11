@@ -6,7 +6,6 @@ Real mutation testing is done with:
     mutmut run --paths-to-mutate bimos/infrastructure/
 """
 
-import pytest
 
 
 def test_suicide() -> None:

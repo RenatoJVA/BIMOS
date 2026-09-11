@@ -4,7 +4,8 @@ Modularized by domain to improve maintainability.
 """
 
 from fastapi import APIRouter
-from bimos.api.endpoints import config, jobs, predict, dock, simulate, system
+
+from bimos.api.endpoints import config, dock, jobs, predict, simulate, system
 
 router = APIRouter(prefix="/api/v1")
 
