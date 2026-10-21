@@ -1,0 +1,83 @@
+# Build context exclusions.
+#
+# Both shipped images are built with `context: backend`, so the file that
+# actually takes effect is `backend/.dockerignore`. This one only matters if you
+# build from the repository root, e.g.
+#   podman build -f backend/dockers/Dockerfile.bimos -t localhost/bimos/global:latest .
+# The scientific image copies nothing from the context, so being generous here is
+# safe; do NOT add pyproject.toml or README.md, which the API builder needs.
+
+# --- version control and CI -------------------------------------------------
+.git
+.gitignore
+.github
+.gitmodules
+
+# --- Python -----------------------------------------------------------------
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info/
+**/.eggs/
+.venv
+venv
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# --- the scientific image's own build outputs -------------------------------
+# GROMACS and Vina are compiled inside the image, so a local build tree must
+# never be picked up by COPY.
+backend/build/
+backend/dist/
+build/
+dist/
+
+# --- Node / frontend --------------------------------------------------------
+node_modules/
+**/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# --- docs and manuscripts ---------------------------------------------------
+# Not needed to run the app, and Manuscript/ holds large binary assets.
+Manuscript/
+DOCS/
+
+# --- installers and packaged artefacts ---------------------------------------
+# builder.py and installer/ build the desktop bundles; the images never need
+# them. Keeping them out also avoids shipping a Nuitka binary in a container.
+installer/
+builder.py
+*.spec
+*.nsi
+
+# --- tests and developer tooling --------------------------------------------
+test/
+test.py
+tools/
+.pre-commit-config.yaml
+mkdocs.yml
+
+# --- secrets -----------------------------------------------------------------
+# H-03: mirror of backend/.dockerignore. A real `.env` must never enter a build
+# context; `.env.example` stays because it carries no real values.
+.env
+.env.*
+!.env.example
+backend/.env
+**/.env
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+
+# --- VCS and editor noise ---------------------------------------------------
+**/.DS_Store
+**/*.swp
+.idea/
+.vscode/

@@ -18,7 +18,7 @@ services:
       - bimos-logs:/logs
       - bimos-data:/data
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    command: ["serve", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["-g", "--headless", "--host", "0.0.0.0", "--port", "8000"]
     depends_on:
       bimos-db:
         condition: service_healthy

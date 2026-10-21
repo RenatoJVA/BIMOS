@@ -9,7 +9,7 @@
 !define APP_VERSION     "0.1.0"
 !endif
 !define APP_PUBLISHER   "BIMOS Project"
-!define APP_URL         "https://github.com/your-org/bimos"
+!define APP_URL         "https://github.com/RenatoJVA/BIMOS"
 !define APP_EXE         "bimos.exe"
 !define INSTALL_DIR     "$PROGRAMFILES64\${APP_NAME}"
 !define UNINSTALL_KEY   "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
@@ -64,6 +64,12 @@ Section "BIMOS Core (required)" SecCore
     ; BINARY_DIR_PATH and README_FILE_PATH will be replaced by builder.py
     File /r "BINARY_DIR_PATH\*.*"
     File "README_FILE_PATH"
+
+    ; --- Legal documents (GPLv3, third-party notices, terms, privacy) ---
+    SetOutPath "$INSTDIR\docs"
+    ; LEGAL_DOCS_DIR_PATH will be replaced by builder.py
+    File /r "LEGAL_DOCS_DIR_PATH\*.*"
+    SetOutPath "$INSTDIR"
 
     ; --- Desktop shortcut ---
     CreateShortcut "$DESKTOP\${APP_NAME}.lnk" \
@@ -125,8 +131,12 @@ Section "Uninstall"
     Delete "$INSTDIR\${APP_EXE}"
     Delete "$INSTDIR\README.md"
     Delete "$INSTDIR\Uninstall.exe"
+    RMDir  /r "$INSTDIR\docs"
     RMDir  /r "$INSTDIR\dockers"
-    RMDir  "$INSTDIR"
+    ; Remove the remaining Nuitka standalone tree (DLLs, .pyd deps, etc.).
+    ; Recursive because File /r above laid down hundreds of files, which would
+    ; otherwise be stranded and block $INSTDIR removal.
+    RMDir  /r "$INSTDIR"
 
     Delete "$DESKTOP\${APP_NAME}.lnk"
     RMDir  /r "$SMPROGRAMS\${APP_NAME}"

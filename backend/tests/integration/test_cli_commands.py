@@ -78,7 +78,7 @@ def test_cli_predict_with_fasta(runner: CliRunner, tmp_path: Path, monkeypatch) 
     fake_job = MagicMock()
     fake_job.id = "cli_test_job"
     fake_store.create.return_value = fake_job
-    with patch("bimos.cli.commands.predict.store", fake_store):
+    with patch("bimos.infrastructure.job_store.store", fake_store):
         with patch("bimos.prediction.predict_boltz", return_value={"status": "completed", "struct_file": "", "confidence": 0.9, "output_dir": ""}):
             result = runner.invoke(cli, ["predict", str(fasta)])
             assert result.exit_code == 0
@@ -97,23 +97,18 @@ def test_cli_dock_with_files(runner: CliRunner, tmp_path: Path, sample_receptor:
     fake_job = MagicMock()
     fake_job.id = "dock_cli_job"
     fake_store.create.return_value = fake_job
-    with patch("bimos.cli.commands.dock.store", fake_store):
-        result = runner.invoke(cli, ["dock", str(sample_receptor), str(sdf)])
-        assert result.exit_code == 0
-        assert "Job ID: dock_cli_job" in result.output
+    with patch("bimos.infrastructure.job_store.store", fake_store):
+        with patch("bimos.docking.run_docking_pipeline", return_value={"status": "completed", "output_dir": str(tmp_path)}):
+            result = runner.invoke(cli, ["dock", str(sample_receptor), str(sdf)])
+            assert result.exit_code == 0
+            assert "Job ID: dock_cli_job" in result.output
 
 
 def test_cli_dock_dataset_not_found(runner: CliRunner, tmp_path: Path, sample_receptor: Path) -> None:
-    fake_store = MagicMock()
-    fake_job = MagicMock()
-    fake_job.id = "dock_dataset_job"
-    fake_store.create.return_value = fake_job
-
-    with patch("bimos.cli.commands.dock.store", fake_store):
-        with patch("bimos.infrastructure.chembl_db.get_available_datasets", return_value=["candidates_1000"]):
-            result = runner.invoke(cli, ["dock", str(sample_receptor), "nonexistent_dataset", "--dataset"])
-            assert result.exit_code == 0
-            assert "not found" in result.output
+    with patch("bimos.infrastructure.chembl_db.get_available_datasets", return_value=["candidates_1000"]):
+        result = runner.invoke(cli, ["dock", str(sample_receptor), "nonexistent_dataset", "--dataset"])
+        assert result.exit_code != 0
+        assert "not found" in result.output
 
 
 def test_cli_workflow_missing_pdb(runner: CliRunner) -> None:

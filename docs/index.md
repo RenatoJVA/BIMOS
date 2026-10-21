@@ -8,7 +8,7 @@ BIMOS integrates molecular docking, protein structure prediction, molecular dyna
 
 ## Key Features
 
-- **Protein Structure Prediction** — ESMFold and Boltz-1
+- **Protein Structure Prediction** — Boltz (GPU)
 - **Molecular Docking** — AutoDock Vina with virtual screening datasets
 - **Molecular Dynamics** — GROMACS-based MD simulations (Apo and Holo)
 - **Quantum Chemistry** — ORCA and Gaussian Hirshfeld charge pipelines

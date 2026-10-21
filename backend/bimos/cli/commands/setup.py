@@ -10,7 +10,16 @@ from bimos.shared.paths import PROCESS_CONFIG_FILES
 def _print(msg: str) -> None:
     click.echo(msg)
 
-@click.command("setup")
+@click.command("setup", epilog="""Examples:
+
+\b
+  First-time bootstrap (configs + container image):
+  bimos setup
+  Only refresh ~/.bimos/config/*.yaml without rebuilding:
+  bimos setup --config-only
+  Force a clean rebuild of the container image:
+  bimos setup --force
+""")
 @click.option("--force", is_flag=True, help="Force rebuild even if image exists.")
 @click.option("--config-only", is_flag=True, help="Only create/update user YAML configs in ~/.bimos/config/.")
 def setup(force: bool, config_only: bool) -> None:

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
+import type { DockGridParams, FileParams } from '../../api/client';
 import { launchDock, launchPrediction, launchQmOrca, launchSimulate, launchSimulateHolo } from '../../api/client';
 import { FLOW_BY_ID } from '../../config';
 import { Button } from '../ui/Button';
@@ -233,8 +234,20 @@ function DockForm({
 }) {
   const [protein, setProtein] = useState<File | null>(null);
   const [ligands, setLigands] = useState<File | null>(null);
+  const [gridMode, setGridMode] = useState<'auto' | 'manual' | 'reference' | 'pocket'>('auto');
+  const [center, setCenter] = useState(['', '', '']);
+  const [size, setSize] = useState(['20', '20', '20']);
+  const [reference, setReference] = useState<File | null>(null);
+  const [pocket, setPocket] = useState('');
+  const [padding, setPadding] = useState('4');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const setAxis = (setter: (v: string[]) => void, values: string[], i: number) => (v: string) => {
+    const next = [...values];
+    next[i] = v;
+    setter(next);
+  };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -242,10 +255,66 @@ function DockForm({
       setError('Both a protein (PDB) and a ligands (SDF) file are required.');
       return;
     }
+    const params: FileParams & DockGridParams = { max_resources: maxResources };
+    if (gridMode === 'manual') {
+      const c = center.map(Number);
+      const s = size.map(Number);
+      if (c.some((v) => !Number.isFinite(v)) || s.some((v) => !Number.isFinite(v))) {
+        setError('Grid center and size require 6 finite numbers.');
+        return;
+      }
+      if (s.some((v) => v <= 0)) {
+        setError('Grid sizes must be > 0.');
+        return;
+      }
+      params.center_x = c[0];
+      params.center_y = c[1];
+      params.center_z = c[2];
+      params.size_x = s[0];
+      params.size_y = s[1];
+      params.size_z = s[2];
+    } else if (gridMode === 'reference') {
+      if (!reference) {
+        setError('Upload a reference ligand (SDF) in the receptor frame to center the grid on.');
+        return;
+      }
+      const s = size.map(Number);
+      if (s.some((v) => !Number.isFinite(v) || v <= 0)) {
+        const p = Number(padding);
+        if (!Number.isFinite(p) || p < 0) {
+          setError('Provide either a valid size or a padding >= 0 for the reference ligand.');
+          return;
+        }
+        params.padding = p;
+      } else {
+        params.size_x = s[0];
+        params.size_y = s[1];
+        params.size_z = s[2];
+      }
+    } else if (gridMode === 'pocket') {
+      if (!pocket.trim()) {
+        setError('Provide pocket residues, e.g. “375,347,351” or “A:375-380”.');
+        return;
+      }
+      params.pocket_residues = pocket.trim();
+      const s = size.map(Number);
+      if (s.some((v) => !Number.isFinite(v) || v <= 0)) {
+        const p = Number(padding);
+        if (!Number.isFinite(p) || p < 0) {
+          setError('Provide either a valid size or a padding >= 0 for the pocket.');
+          return;
+        }
+        params.padding = p;
+      } else {
+        params.size_x = s[0];
+        params.size_y = s[1];
+        params.size_z = s[2];
+      }
+    }
     setError(null);
     setSubmitting(true);
     try {
-      const job = await launchDock({ protein, ligands }, { max_resources: maxResources });
+      const job = await launchDock({ protein, ligands, reference: reference ?? undefined }, params);
       notify('success', `Docking started (${job.id}).`);
       onDone();
     } catch (err) {
@@ -255,10 +324,32 @@ function DockForm({
     }
   };
 
+  const axisRow = (
+    label: string,
+    values: string[],
+    setter: (v: string[]) => void,
+  ) => (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-[0.8rem] font-mono text-text-secondary w-16">{label}</span>
+      {(['X', 'Y', 'Z'] as const).map((axis, i) => (
+        <label key={axis} className="flex items-center gap-1 text-[0.8rem] font-mono text-text-secondary">
+          {axis}
+          <input
+            type="number"
+            step="any"
+            value={values[i]}
+            onChange={(e) => setAxis(setter, values, i)(e.target.value)}
+            className={`${inputClass} w-24`}
+          />
+        </label>
+      ))}
+    </div>
+  );
+
   return (
     <Panel
       title="Molecular Docking (AutoDock Vina)"
-      description="Screen an SDF set of ligands against a PDB receptor."
+      description="Screen an SDF set of ligands against a PDB receptor. Default grid covers the whole receptor (blind); target a pocket below."
       onSubmit={submit}
       submitting={submitting}
     >
@@ -266,6 +357,67 @@ function DockForm({
         <FileDrop id="dock-protein" label="Protein (PDB)" accept=".pdb" file={protein} onFileSelect={setProtein} />
         <FileDrop id="dock-ligands" label="Ligands (SDF)" accept=".sdf" file={ligands} onFileSelect={setLigands} />
       </div>
+      <Field label="Search box" htmlFor="dock-grid-mode" hint="Auto = whole receptor (blind). Other modes target a pocket.">
+        <select
+          id="dock-grid-mode"
+          value={gridMode}
+          onChange={(e) => setGridMode(e.target.value as typeof gridMode)}
+          className={`${inputClass} max-w-xs`}
+        >
+          <option value="auto">Auto — whole receptor (blind)</option>
+          <option value="manual">Manual — center + size</option>
+          <option value="reference">Center on reference ligand (SDF)</option>
+          <option value="pocket">Pocket residues</option>
+        </select>
+      </Field>
+      {gridMode === 'manual' && (
+        <div className="flex flex-col gap-2">
+          {axisRow('Center', center, setCenter)}
+          {axisRow('Size', size, setSize)}
+        </div>
+      )}
+      {gridMode === 'reference' && (
+        <div className="flex flex-col gap-3">
+          <FileDrop id="dock-reference" label="Reference ligand (SDF, receptor frame)" accept=".sdf" file={reference} onFileSelect={setReference} />
+          {axisRow('Size (or padding)', size, setSize)}
+          <Field label="Padding" htmlFor="dock-padding" hint="Used when size is empty. Added to the ligand span.">
+            <input
+              id="dock-padding"
+              type="number"
+              step="any"
+              min={0}
+              value={padding}
+              onChange={(e) => setPadding(e.target.value)}
+              className={`${inputClass} w-32`}
+            />
+          </Field>
+        </div>
+      )}
+      {gridMode === 'pocket' && (
+        <div className="flex flex-col gap-3">
+          <Field label="Pocket residues" htmlFor="dock-pocket" hint="E.g. “375,347,351” or “A:375-380”.">
+            <input
+              id="dock-pocket"
+              value={pocket}
+              onChange={(e) => setPocket(e.target.value)}
+              placeholder="375,347,351"
+              className={inputClass}
+            />
+          </Field>
+          {axisRow('Size (or padding)', size, setSize)}
+          <Field label="Padding" htmlFor="dock-padding" hint="Used when size is empty. Added to the pocket span.">
+            <input
+              id="dock-padding"
+              type="number"
+              step="any"
+              min={0}
+              value={padding}
+              onChange={(e) => setPadding(e.target.value)}
+              className={`${inputClass} w-32`}
+            />
+          </Field>
+        </div>
+      )}
       {error && <FormError message={error} />}
     </Panel>
   );

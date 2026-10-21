@@ -1,100 +1,245 @@
+# syntax=docker/dockerfile:1
+#
 # BIMOS Global Dockerfile
-# Consolidates Vina, GROMACS, and Boltz-1 into a single image.
+# Consolidates AutoDock Vina, GROMACS and Boltz-2 into a single image.
+#
+# Reproducibility contract:
+#   * every external download is verified against a pinned SHA-256;
+#   * every Python dependency is version-pinned;
+#   * Boltz and Meeko come from PyPI, never from an unpinned git clone.
+#
+# Override any pin at build time, e.g.:
+#   podman build --build-arg BOLTZ_VERSION=2.2.1 -t localhost/bimos/global:latest .
+
+ARG CUDA_VERSION=13.1.1
+ARG UBUNTU_SUFFIX=ubuntu24.04
+ARG GROMACS_VERSION=2025.4
+# sha256 of gromacs-2025.4.tar.gz from https://ftp.gromacs.org/gromacs/
+# (md5 733448146f1f0555c9fd8d7a5d14ac7b, as published in the GROMACS docs)
+ARG GROMACS_SHA256=ca17720b4a260eb73649211e9f6a940ee7543452129844213c3accb0a927a5c3
+ARG VINA_VERSION=1.2.5
+# sha256 of the official AutoDock-Vina v1.2.5 linux x86_64 release binary
+ARG VINA_SHA256=fa0126a28a9ea9162d1b161dfa92bc76e632416db28ca246278ea4b2dc6860cb
+ARG BOLTZ_VERSION=2.2.1
+ARG TORCH_VERSION=2.14.1
+ARG TORCH_CUDA_CHANNEL=cu130
+# cuequivariance 0.6.1 was published 2025-09-04, four days before boltz 2.2.1
+# (2025-09-08), so it is the release this image targets. Newer versions move
+# months past the last version boltz was tested against.
+ARG CUEQUIVARIANCE_VERSION=0.6.1
+# Boltz imports cuequivariance lazily, only inside kernel_* functions, and
+# boltz.yaml ships `no_kernels: true`. The stack is therefore opt-in: turn it on
+# with --build-arg INSTALL_BOLTZ_KERNELS=ON to use `use_kernels: false`.
+ARG INSTALL_BOLTZ_KERNELS=OFF
+ARG MEEKO_VERSION=0.8.0
+# BIMOS only ever invokes the single-precision `gmx` binary, so the optional
+# double-precision build is off by default (it roughly doubles build time).
+ARG GMX_DOUBLE=OFF
 
 #################################################################
-# Stage 1: GROMACS Builder
+# Stage 1: GROMACS builder
 #################################################################
-FROM docker.io/nvidia/cuda:13.1.1-cudnn-devel-ubuntu24.04 AS gmx_builder
+FROM docker.io/nvidia/cuda:${CUDA_VERSION}-cudnn-devel-${UBUNTU_SUFFIX} AS gmx_builder
+
+ARG GROMACS_VERSION
+ARG GROMACS_SHA256
+ARG GMX_DOUBLE
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential cmake git wget curl libfftw3-dev mpich ca-certificates \
+    build-essential \
+    cmake \
+    ccache \
+    ca-certificates \
+    curl \
+    libfftw3-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /opt
-RUN wget https://ftp.gromacs.org/gromacs/gromacs-2025.4.tar.gz && \
-    tar xfz gromacs-2025.4.tar.gz && rm gromacs-2025.4.tar.gz && \
-    cd gromacs-2025.4 && mkdir build && cd build && \
-    CC=gcc CXX=g++ cmake .. \
-      -DGMX_OPENMP=ON \
-      -DGMX_BUILD_OWN_FFTW=ON \
-      -DREGRESSIONTEST_DOWNLOAD=OFF \
+# Fail the build on a corrupted or substituted tarball.
+RUN set -eux; \
+    curl -fsSL -o /tmp/gromacs.tar.gz \
+      "https://ftp.gromacs.org/gromacs/gromacs-${GROMACS_VERSION}.tar.gz"; \
+    echo "${GROMACS_SHA256}  /tmp/gromacs.tar.gz" | sha256sum -c -; \
+    mkdir -p /opt/gromacs-src; \
+    tar xfz /tmp/gromacs.tar.gz -C /opt/gromacs-src --strip-components=1; \
+    rm -f /tmp/gromacs.tar.gz
+
+# GMX_BUILD_OWN_FFTW is OFF on purpose: GROMACS' own default. Turning it on
+# makes CMake download and build FFTW from the internet mid-build, ignoring the
+# system libfftw3-dev that this stage installs.
+# GMX_MPI=OFF is explicit so `gmx` (not `gmx_mpi`) is what lands on PATH, which
+# is the binary name the BIMOS MD pipeline invokes.
+RUN --mount=type=cache,target=/root/.cache/ccache,sharing=locked \
+    set -eux; \
+    cmake -S /opt/gromacs-src -B /opt/gromacs-src/build \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+      -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+      -DCMAKE_INSTALL_PREFIX=/usr/local/gromacs \
       -DGMX_GPU=CUDA \
       -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda \
-      -DGMX_FFT_LIBRARY=fftw3 \
-      -DGMX_PYTHON_PACKAGE=OFF \
-      -DGMX_PREFER_STATIC_LIBS=ON && \
-    make -j"$(nproc)" && make install && \
-    cd ../ && rm -rf build && mkdir build && cd build && \
-    CC=gcc CXX=g++ cmake .. \
       -DGMX_OPENMP=ON \
-      -DGMX_BUILD_OWN_FFTW=ON \
-      -DREGRESSIONTEST_DOWNLOAD=OFF \
+      -DGMX_MPI=OFF \
       -DGMX_FFT_LIBRARY=fftw3 \
+      -DGMX_BUILD_OWN_FFTW=OFF \
       -DGMX_PYTHON_PACKAGE=OFF \
       -DGMX_PREFER_STATIC_LIBS=ON \
-      -DGMX_DOUBLE=on && \
-    make -j"$(nproc)" && make install
+      -DGMX_DEFAULT_SUFFIX=OFF \
+      -DREGRESSIONTEST_DOWNLOAD=OFF; \
+    cmake --build /opt/gromacs-src/build --parallel "$(nproc)"; \
+    cmake --install /opt/gromacs-src/build; \
+    rm -rf /opt/gromacs-src
+
+# Optional second install for double precision. BIMOS never calls it.
+RUN --mount=type=cache,target=/root/.cache/ccache,sharing=locked \
+    if [ "${GMX_DOUBLE}" = "ON" ]; then \
+      set -eux; \
+      curl -fsSL -o /tmp/gromacs.tar.gz \
+        "https://ftp.gromacs.org/gromacs/gromacs-${GROMACS_VERSION}.tar.gz"; \
+      echo "${GROMACS_SHA256}  /tmp/gromacs.tar.gz" | sha256sum -c -; \
+      mkdir -p /opt/gromacs-src; \
+      tar xfz /tmp/gromacs.tar.gz -C /opt/gromacs-src --strip-components=1; \
+      cmake -S /opt/gromacs-src -B /opt/gromacs-src/build-double \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+        -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+        -DCMAKE_INSTALL_PREFIX=/usr/local/gromacs \
+        -DGMX_GPU=OFF \
+        -DGMX_OPENMP=ON \
+        -DGMX_MPI=OFF \
+        -DGMX_FFT_LIBRARY=fftw3 \
+        -DGMX_BUILD_OWN_FFTW=OFF \
+        -DGMX_PYTHON_PACKAGE=OFF \
+        -DGMX_PREFER_STATIC_LIBS=ON \
+        -DGMX_DOUBLE=ON \
+        -DREGRESSIONTEST_DOWNLOAD=OFF; \
+      cmake --build /opt/gromacs-src/build-double --parallel "$(nproc)"; \
+      cmake --install /opt/gromacs-src/build-double; \
+      rm -rf /opt/gromacs-src /tmp/gromacs.tar.gz; \
+    fi
 
 #################################################################
-# Stage 2: Final Runtime Image
+# Stage 2: runtime image
 #################################################################
-FROM docker.io/nvidia/cuda:13.1.1-cudnn-runtime-ubuntu24.04
+FROM docker.io/nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-${UBUNTU_SUFFIX}
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV PYTHONUNBUFFERED=1
-ENV GMX_MAXBACKUP=999
+ARG BOLTZ_VERSION
+ARG TORCH_VERSION
+ARG TORCH_CUDA_CHANNEL
+ARG CUEQUIVARIANCE_VERSION
+ARG INSTALL_BOLTZ_KERNELS
+ARG VINA_VERSION
+ARG VINA_SHA256
+ARG MEEKO_VERSION
 
-# Install system dependencies
+LABEL org.opencontainers.image.title="BIMOS Global" \
+      org.opencontainers.image.description="AutoDock Vina, GROMACS and Boltz-2 in one CUDA image" \
+      org.opencontainers.image.licenses="MIT AND GPL-2.0-or-later AND LGPL-2.1-only AND Apache-2.0" \
+      org.opencontainers.image.documentation="https://github.com/BIMOS-suite/BIMOS" \
+      org.opencontainers.image.source="https://github.com/BIMOS-suite/BIMOS"
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    GMX_MAXBACKUP=999 \
+    PATH=/usr/local/gromacs/bin:/usr/local/bin:$PATH
+
+# No compiler and no python3-dev: every dependency below ships a cp312 manylinux
+# wheel or a pure-Python sdist (checked against PyPI, see the pins in this
+# file), so the runtime never needs to build a C extension. The GROMACS builder
+# stage above is the only place a toolchain exists.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip python3-dev \
-    git wget curl ca-certificates \
-    libfftw3-single3 libfftw3-double3 \
-    mpich libopenmpi-dev \
-    libxml2 \
-    g++ \
+    python3.12 \
+    python3-pip \
+    ca-certificates \
+    curl \
+    libfftw3-single3 \
+    libfftw3-double3 \
+    libgomp1 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install Vina (use the pre-compiled binary from the vina-all image or fallback to conda-forge)
-RUN wget -q "https://github.com/ccsb-scripps/AutoDock-Vina/releases/download/v1.2.5/vina_1.2.5_linux_x86_64" \
-        -O /usr/local/bin/vina && \
-    chmod +x /usr/local/bin/vina || \
-    (pip3 install --no-cache-dir vina && ln -sf $(python3 -c "import vina, os; print(os.path.join(os.path.dirname(vina.__file__), 'vina'))") /usr/local/bin/vina)
+# AutoDock Vina. Hard fail on a bad download: the previous `pip install vina`
+# fallback needed Boost and SWIG, which are not in this image, so it turned a
+# clear download error into a confusing build error.
+RUN set -eux; \
+    curl -fsSL -o /usr/local/bin/vina \
+      "https://github.com/ccsb-scripps/AutoDock-Vina/releases/download/v${VINA_VERSION}/vina_${VINA_VERSION}_linux_x86_64"; \
+    echo "${VINA_SHA256}  /usr/local/bin/vina" | sha256sum -c -; \
+    chmod 0755 /usr/local/bin/vina; \
+    /usr/local/bin/vina --version
 
-# Copy GROMACS from builder
 COPY --from=gmx_builder /usr/local/gromacs /usr/local/gromacs
-ENV PATH=/usr/local/gromacs/bin:$PATH
-RUN echo "source /usr/local/gromacs/bin/GMXRC" >> /etc/bash.bashrc
+RUN echo "source /usr/local/gromacs/bin/GMXRC" >> /etc/bash.bashrc \
+    && gmx --version
 
-# Install Python packages for Vina/Meeko/RDKit
-RUN pip3 install --break-system-packages --no-cache-dir \
-    rdkit \
-    numpy \
-    # gemmi \
-    scipy \
-    tomli \
-    tqdm \
-    pandas \
-    requests \
-    biopython \
-    git+https://github.com/forlilab/meeko
+# PyTorch from the CUDA-matched channel. PyPI's default wheels are not pinned to
+# a CUDA version, which made GPU support depend on build day.
+RUN set -eux; \
+    pip3 install --break-system-packages --no-cache-dir \
+      --index-url "https://download.pytorch.org/whl/${TORCH_CUDA_CHANNEL}" \
+      "torch==${TORCH_VERSION}"; \
+    python3 -c "import sys,torch;c=sys.argv[1];e=c[2:-1]+'.'+c[-1];assert torch.version.cuda==e,f'want CUDA {e}, got {torch.version.cuda}';print('torch',torch.__version__,'cuda',torch.version.cuda)" \
+      "${TORCH_CUDA_CHANNEL}"
 
-# Install PyTorch with CUDA (for GPU-accelerated predictions: Boltz)
-RUN pip3 install --break-system-packages --no-cache-dir \
-    torch torchvision torchaudio
+# Chemistry stack. Boltz 2.2.1 requires numpy<2.0, which is why it is pinned here
+# rather than left to the resolver.
+RUN set -eux; \
+    pip3 install --break-system-packages --no-cache-dir \
+      "numpy==1.26.4" \
+      "scipy==1.13.1" \
+      "pandas==2.2.3" \
+      "biopython==1.84" \
+      "requests==2.32.3" \
+      "types-requests==2.31.0.20240406" \
+      "tqdm==4.67.1" \
+      "rdkit==2024.09.6" \
+      "gemmi==0.6.5" \
+      "meeko==${MEEKO_VERSION}"
 
-# Install Boltz from GitHub (CUDA-enabled)
-RUN git clone --depth 1 https://github.com/jwohlwend/boltz.git /opt/boltz && \
-    cd /opt/boltz && \
-    pip3 install --break-system-packages --no-cache-dir .[cuda] && \
-    rm -rf /opt/boltz
+# Boltz from PyPI. The previous `git clone --depth 1` of main meant every image
+# build could silently install a different release.
+#
+# `boltz==2.2.1` pins its own runtime dependencies exactly, so the resolver
+# cannot drift. `pip3 check` below is what proves that: the chemistry pins above
+# satisfy every one of those constraints, and the build fails loudly here rather
+# than on a user's first prediction.
+RUN set -eux; \
+    pip3 install --break-system-packages --no-cache-dir \
+      "boltz==${BOLTZ_VERSION}"; \
+    pip3 check; \
+    boltz --help > /dev/null; \
+    boltz predict --help > /dev/null; \
+    python3 -c "import boltz, numpy, torch; print('boltz ok; numpy', numpy.__version__)"
 
-# Set up directories
+# Optional fused-triangular-attention kernels. The upstream `[cuda]` extra
+# requests the CUDA 12 builds of these, which do not match the cu130 torch
+# above, so the cu13 wheels are named explicitly.
+#
+# This is off by default: boltz.yaml sets `no_kernels: true`, and boltz only
+# imports cuequivariance inside its kernel_* functions, so the plain torch path
+# above is complete on its own. Enabling this makes predictions faster but is
+# not covered by BIMOS' test suite, so it is a deliberate opt-in.
+RUN set -eux; \
+    if [ "${INSTALL_BOLTZ_KERNELS}" = "ON" ]; then \
+      pip3 install --break-system-packages --no-cache-dir \
+        "cuequivariance==${CUEQUIVARIANCE_VERSION}" \
+        "cuequivariance-torch==${CUEQUIVARIANCE_VERSION}" \
+        "cuequivariance-ops-cu13==${CUEQUIVARIANCE_VERSION}" \
+        "cuequivariance-ops-torch-cu13==${CUEQUIVARIANCE_VERSION}"; \
+      python3 -c "from cuequivariance_torch.primitives.triangle import triangle_attention, triangle_multiplicative_update; print('cuequivariance kernels ok')"; \
+    fi
+
+# Fail the build here rather than on the first prediction.
+RUN set -eux; \
+    pip3 check; \
+    gmx --version; \
+    vina --version; \
+    python3 -c "import torch, boltz, meeko, rdkit, gemmi; print('imports ok')"
+
 RUN mkdir -p /models /workspace /data /results
 WORKDIR /workspace
-
-# Final configuration
-ENV PATH="/usr/local/bin:$PATH"
 
 CMD ["/bin/bash"]

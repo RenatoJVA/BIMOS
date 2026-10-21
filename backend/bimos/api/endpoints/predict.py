@@ -17,7 +17,7 @@ router = APIRouter(tags=["Prediction"])
 
 @router.post("/predict", response_model=JobResponse, status_code=202)
 async def predict_job(req: PredictBoltzRequest):  # type: ignore[no-untyped-def]
-    """Submit a structure prediction job using Boltz-1."""
+    """Submit a structure prediction job using Boltz-2."""
     safe_name = safe_filename(req.name)
     job_dir = settings.workspace_path / "predict" / safe_name
     job_dir.mkdir(parents=True, exist_ok=True)
@@ -43,7 +43,7 @@ async def predict_job(req: PredictBoltzRequest):  # type: ignore[no-untyped-def]
 
 @router.post("/predict-boltz", response_model=JobResponse, status_code=202)
 async def predict_boltz_job(req: PredictBoltzRequest):  # type: ignore[no-untyped-def]
-    """Submit a Boltz-1 prediction job."""
+    """Submit a Boltz-2 prediction job."""
     safe_name = safe_filename(req.name)
     job_dir = settings.workspace_path / "boltz" / safe_name
     job_dir.mkdir(parents=True, exist_ok=True)

@@ -104,11 +104,24 @@ def _max_patch(name: str, data: dict[str, Any]) -> dict[str, Any]:
     elif name in ("orca", "gaussian"):
         key = "orca" if name == "orca" else "gaussian"
         block = patched.setdefault(key, {})
+        max_jobs = max(int(block.get("max_jobs", 2)), threads // 2 or 1)
+        from bimos.shared.hardware import detect_mem
+
+        mem = detect_mem()
+        # The MAX profile raises the per-job footprint from 32 GB to 64 GB.
+        # That must still fit the default parallelism (2 jobs) inside the
+        # host's physical RAM, otherwise the hardware guard can only block
+        # every MAX run. On smaller hosts, keep the safe 32 GB per job.
+        default_parallel = 2
+        mem_per_job_gb = 64.0
+        headroom_jobs = default_parallel
+        if mem is not None:
+            headroom_jobs = max(1, int(mem.total_gb // mem_per_job_gb))
         if name == "orca":
-            block["maxcore_mb"] = 64000
+            block["maxcore_mb"] = 64000 if headroom_jobs >= default_parallel else 32000
         else:
-            block["mem"] = "64GB"
-        block["max_jobs"] = max(int(block.get("max_jobs", 2)), threads // 2 or 1)
+            block["mem"] = "64GB" if headroom_jobs >= default_parallel else "32GB"
+        block["max_jobs"] = max_jobs
 
     return patched
 

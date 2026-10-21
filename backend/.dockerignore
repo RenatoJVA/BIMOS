@@ -1,0 +1,65 @@
+# Build context exclusions for the backend/ context.
+#
+# Both images are built with `context: backend`, so this is the file Docker
+# actually reads:
+#   * the API image      -> compose `context: backend`, dockerfile: Dockerfile
+#   * the scientific one -> bimos setup, context = backend/dockers/..
+#
+# Two goals: keep the context small, and make sure no local artefact is ever
+# what a build consumes. A stale .venv or node_modules inside the context is
+# the classic way to ship an image that only works on the maintainer's machine.
+#
+# NOTE: the API builder stage does `COPY pyproject.toml README.md ./`, so those
+# two files must never be listed here.
+
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# --- Node / frontend --------------------------------------------------------
+node_modules/
+dist/
+.vite/
+
+# --- local build trees ------------------------------------------------------
+# GROMACS and Vina are compiled inside the image, and the wheel is built by the
+# builder stage; a local tree must never be picked up instead.
+build/
+mutants/
+
+# --- tests and developer tooling --------------------------------------------
+# The images install the bimos package itself, never the test suite.
+tests/
+.coveragerc
+.pre-commit-config.yaml
+
+# --- secrets -----------------------------------------------------------------
+# H-03: `.env` holds the real database URL and tool paths. No stage in this
+# repository does a broad `COPY . .`, so the file cannot reach an image today,
+# but nothing stops the next Dockerfile from adding one. Excluding it here makes
+# the guarantee structural instead of incidental.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+
+# --- caches and editor noise ------------------------------------------------
+.DS_Store
+*.swp
+.idea/
+.vscode/

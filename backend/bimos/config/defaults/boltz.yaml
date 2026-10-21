@@ -1,9 +1,15 @@
+# Boltz-2 structure prediction — safe user-tunable parameters.
+# Delete this file to regenerate it with the packaged defaults.
+
+# boltz1 reproduces the Boltz-1 model; boltz2 is the current release.
+model: boltz2
 num_models: 5
 recycling_steps: 10
 sampling_steps: 200
 diffusion_samples: 50
 max_parallel_samples: 6
-step_scale: 1.638
+# Tuned per model: 1.5 for boltz2, 1.638 for boltz1.
+step_scale: 1.5
 max_msa_seqs: 8192
 num_subsampled_msa: 1024
 num_workers: 8

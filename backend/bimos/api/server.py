@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -30,6 +30,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def _security_headers(request: Request, call_next):  # type: ignore[no-untyped-def]
+    """H-04: baseline response headers for the local API/dashboard."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    return response
 
 app.include_router(router)
 
@@ -184,6 +195,15 @@ def start_server(
             sys.exit(1)
         target_url = remote_url
     else:
+        if host not in {"127.0.0.1", "localhost", "::1"}:
+            # H-04: BIMOS has no API authentication yet, so a non-loopback
+            # binding is an explicit exposure decision, not a silent default.
+            print(
+                "\n\033[1;33mWarning:\033[0m "
+                f"BIMOS is binding to non-loopback host {host!r}. "
+                "The API has no authentication; expose it only behind a trusted "
+                "network, VPN, or reverse proxy with access control."
+            )
         if not desktop:
             _run_server(host, port)
             return

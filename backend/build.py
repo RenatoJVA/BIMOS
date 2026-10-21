@@ -4,11 +4,129 @@ Compiles the application into a standalone executable via Nuitka.
 """
 
 import importlib.util
+import platform
 import shutil
 import subprocess
 import sys
-import platform
 from pathlib import Path
+
+# H-01: artefacts that identify a released BIMOS build. Anything hashed here is
+# what a licensee verifies before installing, so the list is intentionally narrow.
+_CHECKSUM_SUFFIXES = (".exe", ".bin", ".deb", ".dmg", ".AppImage", ".msi")
+_CHECKSUM_MANIFEST = "SHA256SUMS"
+
+
+def _strip_debug_binaries(dist_dir: Path) -> None:
+    """H-02: drop ELF debug/symbol tables from the compilation output.
+
+    Nuitka 4.2+ rejects ``--strip`` (option removed), so the equivalent is
+    applied post-compilation to every ELF artifact that goes into the
+    distribution. Silently skipped when ``strip`` is unavailable (Windows).
+    """
+    strip = shutil.which("strip")
+    if not strip:
+        return
+    seen: set[Path] = set()
+    for elf in dist_dir.rglob("*"):
+        if elf.is_symlink() or not elf.is_file():
+            continue
+        probe = elf.read_bytes()[:4]
+        if probe != b"\x7fELF" or elf in seen:
+            continue
+        seen.add(elf)
+        subprocess.run([strip, "--strip-all", str(elf)], check=False, capture_output=True)
+
+
+# NSS runtime bits that QtWebEngine needs at runtime but Nuitka standalone omits
+# (it classifies libnss3/libnssutil3 etc. as system libraries). Without them the
+# bundled libsmime3.so resolves the host's older NSS and the import of
+# PyQt6.QtWebEngineCore dies with "version `NSSUTIL_3.101' not found".
+_NSS_LIBS = (
+    "libnss3.so",
+    "libnssutil3.so",
+    "libssl3.so",
+    "libnssckbi.so",
+    "libfreebl3.so",
+    "libfreebl3.chk",
+    "libfreeblpriv3.so",
+    "libfreeblpriv3.chk",
+    "libsoftokn3.so",
+    "libsoftokn3.chk",
+    "libsmime3.so",
+    "libnspr4.so",
+    "libplc4.so",
+    "libplds4.so",
+)
+
+
+def _bundle_nss_libs(dist_dir: Path) -> None:
+    """Ship the NSS runtime from the build environment next to the binary.
+
+    QtWebEngineCore links (and dlopens) against NSS; the standalone bundle only
+    carries the pieces Nuitka traced, so the loader falls back to the host NSS,
+    which is frequently older than the one the environment was built against.
+    Copying the environment's own NSS into ``dist_dir`` root (where the
+    ``$ORIGIN`` RPATH of every bundled library points) makes the resolution
+    deterministic on any host.
+    """
+    if platform.system().lower() != "linux":
+        return
+    source_dir = Path(sys.prefix) / "lib"
+    if not source_dir.is_dir():
+        print(f"Warning: {source_dir} not found; NSS bundling skipped.")
+        return
+    copied, present = [], []
+    for name in _NSS_LIBS:
+        target = dist_dir / name
+        if target.exists():
+            present.append(name)
+            continue
+        source = source_dir / name
+        if not source.exists():
+            print(f"Warning: {name} not found in {source_dir}; skipping.")
+            continue
+        shutil.copy2(source, target)
+        copied.append(name)
+    if copied:
+        print(f"NSS runtime bundled from env: {', '.join(copied)} ({len(copied)} file(s)); "
+              f"{len(present)} already present.")
+
+
+def _write_checksums(dist_dir: Path) -> Path | None:
+    """Emit ``SHA256SUMS`` for the released artefacts under *dist_dir*.
+
+    An unsigned binary is indistinguishable from a tampered one, so every
+    distribution must ship this manifest next to the artefacts. Returns the
+    manifest path, or ``None`` when there is nothing to hash.
+    """
+    import hashlib
+
+    def _is_released(path: Path) -> bool:
+        rel = path.relative_to(dist_dir)
+        if path.suffix.lower() not in _CHECKSUM_SUFFIXES:
+            return False
+        # Nuitka intermediates live under main.<mode>.build; releases ship main.dist
+        return not any(part.endswith(".build") for part in rel.parts)
+
+    targets = sorted(path for path in dist_dir.rglob("*") if path.is_file() and _is_released(path))
+    if not targets:
+        print("Warning: no distributable artefact found; skipping SHA256SUMS.")
+        return None
+
+    lines = []
+    for path in targets:
+        digest = hashlib.sha256()
+        with open(path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        lines.append(f"{digest.hexdigest()}  {path.relative_to(dist_dir).as_posix()}")
+
+    manifest = dist_dir / _CHECKSUM_MANIFEST
+    manifest.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"Wrote {manifest} ({len(targets)} artefact(s)):")
+    for line in lines:
+        print(f"  {line}")
+    return manifest
 
 
 def _webview_package_dir() -> Path | None:
@@ -86,7 +204,6 @@ def main():
     cores = max(1, int((os.cpu_count() or 1) * 0.8))
     is_windows = platform.system().lower() == "windows"
     is_macos = platform.system().lower() == "darwin"
-    is_linux = not is_windows and not is_macos
 
     cmd = [
         sys.executable,
@@ -150,6 +267,15 @@ def main():
     print(f"Running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
 
+    # H-02. Strip debug/symbol tables from all ELF artifacts produced
+    # (Nuitka >= 4.2 does not accept ``--strip`` anymore, so we do it here).
+    _strip_debug_binaries(dist_dir)
+
+    # Bundle the environment's NSS runtime next to the binary: Nuitka standalone
+    # omits libnss3/libnssutil3 (treated as system libraries), and without them
+    # QtWebEngine resolves the host NSS and dies on version mismatch.
+    _bundle_nss_libs(dist_dir / "main.dist")
+
     # ── NK-02: UPX compression (if available) ──
     if shutil.which("upx"):
         dist_bin = dist_dir / "main.dist"
@@ -164,6 +290,9 @@ def main():
     if is_windows and not dist_exe.exists():
         print(f"Error: expected Windows binary missing: {dist_exe}")
         sys.exit(1)
+
+    # ── H-01: integrity manifest for whatever gets shipped ──
+    _write_checksums(dist_dir)
 
 
 if __name__ == "__main__":

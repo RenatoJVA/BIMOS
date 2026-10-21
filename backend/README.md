@@ -13,7 +13,7 @@ bimos/
 ├── config/         # Environment and YAML configuration management
 ├── docking/        # AutoDock Vina pipeline
 ├── molecular_dynamics/  # GROMACS pipeline
-├── prediction/     # ESMFold and Boltz-1 structure prediction
+├── prediction/     # Boltz structure prediction
 ├── quantum_chemistry/   # ORCA and Gaussian 16 pipelines
 ├── infrastructure/ # Database, Docker SDK, job store, ChEMBL integration
 ├── shared/         # Common utilities, paths, templates
