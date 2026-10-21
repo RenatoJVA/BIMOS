@@ -17,32 +17,62 @@ manual:
         BIMOS provides built-in curated datasets (`candidates_1000`, `phytocompounds_300`) for virtual screening.
         
         * **Search Candidates**: `bimos db query "acid" --dataset phytocompounds_300`
+        * **Filter by Properties**: `bimos db query "acid" -d candidates_1000 --druglike --max-mw 450`
         * **Export Dataset**: `bimos db export candidates_1000 ./my_ligands.sdf`
+        * **Export Drug-like Only**: `bimos db export candidates_1000 ./druglike.sdf --druglike`
         * **Direct Screening**: `bimos dock target.pdb candidates_1000 --dataset -g`
 
     - title: "## 3. Protein Structure Prediction"
       content: |
-        Predict 3D structures from FASTA sequences using AI-driven folding models.
-        * **Boltz-1**: `bimos predict sequence.fasta -o output_dir/`
+        Predict 3D structures from FASTA sequences using AI-driven folding models. A GPU is required.
+        * **Boltz-2 (default)**: `bimos predict sequence.fasta -o output_dir/`
+        * **Boltz-1**: add `--model boltz1` (slower, use only to reproduce older results)
+
+    - title: "## 3b. Hardware Check"
+      content: |
+        Every pipeline grades itself against the machine before it starts.
+        * **Check first**: `bimos doctor` (add `--json` for machine-readable output)
+        * **Traffic light**: green runs as-is, yellow runs with a warning, red is refused.
+        * **Override a red verdict**: append `--force` to any pipeline command.
+        * Thresholds are heuristics: 8 GB free VRAM minimum (16 GB recommended),
+          and not more than 70% of installed RAM per job or 100% in total.
+          Workspace disk needs 10 GB free (50 GB recommended).
+        * Fix a warning by lowering the values in `~/.bimos/config/`, not with `--force`.
 
     - title: "## 4. Molecular Docking & Simulation"
       content: |
         ### 4.1. Docking (Vina)
         Perform molecular docking using your own SDF files or built-in datasets.
         * **Example**: `bimos dock protein.pdb ligands.sdf -o results/`
+        * **Targeted docking**: `bimos dock protein.pdb ligands.sdf --center 12.5 3.1 -0.4 --size 20 20 20`
+        * **Center on reference ligand**: `bimos dock protein.pdb ligands.sdf --center-on ref.sdf --padding 4`
+        * **Center on pocket residues**: `bimos dock protein.pdb ligands.sdf --pocket-residues "A:375,347,351" --size 22 22 22`
+        * Without grid flags the box covers the whole receptor (blind docking).
 
         ### 4.2. MD Simulation Workflows (GROMACS)
         Automates the entire GROMACS pipeline.
         * **APO Simulation**: `bimos workflow -p protein.pdb`
-        * **HOLO Simulation**: `bimos workflow -p protein.pdb --ligand-gro lig.gro --ligand-itp lig.itp`
+        * **HOLO Simulation**: `bimos workflow -p protein.pdb --ligand-gro JZ4.gro --ligand-itp JZ4.itp`
+        * **Batch HOLO**: `bimos workflow --protein-dir ./Proteins --ligand-dir ./LIG-DIN`
+        * Holo outputs are named `Holo-<PROT>-<LIG>/` after the ligand file stem.
 
-    - title: "## 5. Quantum Mechanics (QM)"
+    - title: "## 5. Full Screening Cascade"
       content: |
-        Run automated charge computations and structure optimizations using host binaries.
+        Run APO, docking, QM charge refinement, top-N HOLO and a report in one batch.
+        The ligand library must hold `.gro` + `.itp` pairs sharing the SDF candidate stems.
+        * **Full cascade**: `bimos screen -p protein.pdb --ligands ligands.sdf --ligand-dir ./LIG-DIN`
+        * **Skip APO**: `bimos screen --protein-eq protein_eq.pdb --ligands ligands.sdf --ligand-dir ./LIG-DIN`
+        * Re-running resumes from `screen.json` after the last completed stage.
+
+    - title: "## 6. Quantum Mechanics (QM)"
+      content: |
+        Run automated Hirshfeld charge refinement using host binaries.
+        The directory must contain matching `.gro` + `.itp` pairs per ligand.
+        Requires `ORCA_PATH` / `GAUSSIAN_PATH` in `~/.bimos/.env` plus OpenBabel (`obabel`).
         * **ORCA Pipeline**: `bimos qm-orca ./ligands_dir -j 4 --charge 0`
         * **Gaussian 16**: `bimos qm-g16 ./ligands_dir -j 4 --charge 1`
 
-    - title: "## 6. Troubleshooting"
+    - title: "## 7. Troubleshooting"
       content: |
         * **White Screen GUI**: Check `~/.bimos/.env`. If `BIMOS_REMOTE_URL` is set to an unreachable IP, the UI will stall. Comment it out for local mode.
         * **View Logs**: `bimos jobs -l <JOB_ID>`

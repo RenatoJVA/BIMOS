@@ -86,6 +86,13 @@ def run(
         if runtime == "podman":
             full_cmd += ["--userns=keep-id"]
 
+        # H-05: no pipeline needs Linux capabilities -- they are pure numeric
+        # compute over bind-mounted volumes -- so the whole set is dropped and
+        # setuid escalation is disabled. Verified against the docking and QM
+        # pipelines; see private/consultorias/consultoria-12 for the evidence.
+        full_cmd += ["--cap-drop=ALL"]
+        full_cmd += ["--security-opt=no-new-privileges"]
+
         if volumes:
             for host_path, container_path in volumes.items():
                 full_cmd += ["-v", f"{Path(host_path).resolve()}:{container_path}:Z"]

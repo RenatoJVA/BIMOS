@@ -30,12 +30,16 @@ click.rich_click.COMMAND_GROUPS = {
             "commands": ["dock", "workflow"],
         },
         {
+            "name": "Virtual Screening Cascade",
+            "commands": ["screen"],
+        },
+        {
             "name": "Quantum Mechanics (QM)",
             "commands": ["qm-g16", "qm-orca"],
         },
         {
             "name": "System & Management",
-            "commands": ["setup", "jobs", "db", "completion"],
+            "commands": ["doctor", "setup", "jobs", "db", "completion"],
         },
     ],
     "main.py": [
@@ -48,12 +52,16 @@ click.rich_click.COMMAND_GROUPS = {
             "commands": ["dock", "workflow"],
         },
         {
+            "name": "Virtual Screening Cascade",
+            "commands": ["screen"],
+        },
+        {
             "name": "Quantum Mechanics (QM)",
             "commands": ["qm-g16", "qm-orca"],
         },
         {
             "name": "System & Management",
-            "commands": ["setup", "jobs", "db", "completion"],
+            "commands": ["doctor", "setup", "jobs", "db", "completion"],
         },
     ]
 }
@@ -72,8 +80,17 @@ def _print(msg: str) -> None:
 
 # ── Root group ────────────────────────────────────────────────────────────────
 
+def _bimos_version() -> str:
+    try:
+        from importlib.metadata import version
+
+        return version("bimos")
+    except Exception:
+        return "0.1.0"
+
+
 @click.group(invoke_without_command=True)
-@click.version_option(version="0.1.0", prog_name="bimos")
+@click.version_option(version=_bimos_version(), prog_name="bimos")
 @click.option("--debug", is_flag=True, default=False, help="Enable debug logging.")
 @click.option("--max", is_flag=True, default=False, help="Use all available CPU threads.")
 @click.option("-g", "--gui", is_flag=True, default=False, help="Start the BIMOS UI.")
@@ -149,17 +166,21 @@ def cli(ctx: click.Context, debug: bool, max: bool, gui: bool, manual: bool, hos
 
 def _lazy_register_commands() -> None:
     from bimos.cli.commands.dock import dock
+    from bimos.cli.commands.doctor import doctor
     from bimos.cli.commands.predict import predict, predict_boltz
     from bimos.cli.commands.qm import qm_g16, qm_orca
+    from bimos.cli.commands.screen import screen
     from bimos.cli.commands.setup import setup
     from bimos.cli.commands.system import completion, db, jobs
     from bimos.cli.commands.workflow import workflow
 
+    cli.add_command(doctor)
     cli.add_command(setup)
     cli.add_command(predict)
     cli.add_command(predict_boltz)
     cli.add_command(dock)
     cli.add_command(workflow)
+    cli.add_command(screen)
     cli.add_command(qm_orca)
     cli.add_command(qm_g16)
     cli.add_command(jobs)

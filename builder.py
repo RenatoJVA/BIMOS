@@ -74,7 +74,7 @@ def build_frontend(root: Path):
     """
     info("Building Frontend (bun)...")
     require("bun", "Install bun: https://bun.sh")
-    run(["uv", "run", "python", "build.py", "--skip-nuitka"], cwd=root / "backend")
+    run([sys.executable, "build.py", "--skip-nuitka"], cwd=root / "backend")
     ok("Frontend built and synced")
 
 
@@ -82,11 +82,179 @@ def build_nuitka(root: Path):
     info("Compiling with Nuitka...")
     backend = root / "backend"
     # Frontend already built/synced by build_frontend(); skip to avoid rebuild.
-    if shutil.which("uv"):
-        run(["uv", "run", "python", "build.py", "--skip-frontend"], cwd=backend)
-    else:
-        run([sys.executable, "build.py", "--skip-frontend"], cwd=backend)
+    run([sys.executable, "build.py", "--skip-frontend"], cwd=backend)
     ok("Nuitka compilation done")
+
+
+# ── Verification ────────────────────────────────────────────────────────────
+
+def smoke_test_binary(root: Path, version: str):
+    """Execute the compiled binary with --version and demand an exact match."""
+    binary_dir = root / "backend" / "dist" / "main.dist"
+    for name in ("bimos.bin", "bimos.exe"):
+        binary = binary_dir / name
+        if binary.exists():
+            break
+    else:
+        error(f"Binary not found under {binary_dir}")
+        sys.exit(1)
+
+    proc = subprocess.run([str(binary), "--version"], capture_output=True, text=True, timeout=120)
+    expected = f"bimos, version {version}"
+    if proc.returncode != 0 or expected not in (proc.stdout + proc.stderr):
+        error(f"Binary smoke test failed: rc={proc.returncode} out={proc.stdout!r} err={proc.stderr!r}")
+        sys.exit(1)
+    ok(f"Smoke test {binary.name}: {expected}")
+
+
+def check_runtime_libs(root: Path):
+    """Gate: QtWebEngine's NSS chain must resolve from the bundle itself.
+
+    Nuitka standalone omits libnss3/libnssutil3 (treated as system libraries);
+    if the bundle ships libsmime3.so but not its NSS dependencies, every host
+    with an older system NSS dies on import with a version-symbol error.
+    Reproduced here by resolving dependencies against the dist directory first.
+    """
+    if platform.system() != "Linux":
+        return
+    dist = root / "backend" / "dist" / "main.dist"
+    ldd = shutil.which("ldd")
+    if not ldd or not dist.is_dir():
+        warn("Runtime-lib check skipped (ldd or dist missing)")
+        return
+    problematic: list[str] = []
+    for obj in ("libQt6WebEngineCore.so.6", "QtWebEngineProcess", "libsmime3.so"):
+        target = dist / obj
+        if not target.exists():
+            continue
+        proc = subprocess.run(
+            [ldd, str(target)],
+            capture_output=True,
+            text=True,
+            env={"LD_LIBRARY_PATH": str(dist), "PATH": os.environ.get("PATH", "/usr/bin")},
+        )
+        for line in proc.stdout.splitlines():
+            if "not found" in line:
+                problematic.append(f"{obj}: {line.strip()}")
+    if problematic:
+        error(f"Bundle runtime resolution failed ({len(problematic)} problem(s)):")
+        for item in problematic[:8]:
+            print(f"         {item}")
+        sys.exit(1)
+    ok("Runtime libs: QtWebEngine NSS chain resolves from the bundle")
+
+
+def check_stripped(root: Path):
+    """Audit hardening H-02 on Linux/macOS: shipped binary must carry no debug symbols."""
+    if platform.system() == "windows":
+        warn("Stripped check skipped on windows (readelf not applicable)")
+        return
+    binary = root / "backend" / "dist" / "main.dist" / "bimos.bin"
+    if not binary.exists():
+        warn(f"{binary} not found — stripped check skipped")
+        return
+    proc = subprocess.run(["readelf", "-S", str(binary)], capture_output=True, text=True)
+    sections = proc.stdout
+    debug = [ln for ln in sections.splitlines() if ".debug" in ln or ".symtab" in ln]
+    if debug:
+        error(f"Binary still exposes {len(debug)} debug/symbol sections:")
+        for ln in debug[:5]:
+            print(f"         {ln.strip()}")
+        sys.exit(1)
+    ok("ELF stripped: 0 .debug/.symtab sections")
+
+
+def write_manifests(root: Path):
+    """Integrity H-01: SHA256SUMS for backend/dist and installer/dist."""
+    sys.path.insert(0, str(root / "backend"))
+    import build as backend_build
+
+    for dist_dir in (root / "backend" / "dist", root / "installer" / "dist"):
+        if not dist_dir.exists():
+            warn(f"{dist_dir} does not exist — manifest skipped")
+            continue
+        if backend_build._write_checksums(dist_dir) is None:
+            warn(f"No artifacts to hash in {dist_dir}")
+        else:
+            ok(f"SHA256SUMS updated in {dist_dir.relative_to(root)}")
+
+
+def verify_deb(root: Path, version: str):
+    """Structural audit of the .deb without installing: metadata, payload, hash."""
+    deb = root / "installer" / "dist" / f"bimos_{version}_amd64.deb"
+    if not deb.exists():
+        warn(f".deb not found: {deb} — verify skipped")
+        return
+    if not shutil.which("dpkg-deb"):
+        warn("dpkg-deb not available — .deb verification skipped")
+        return
+
+    pkg_version = subprocess.run(
+        ["dpkg-deb", "-f", str(deb), "Version"], capture_output=True, text=True
+    ).stdout.strip()
+    if pkg_version != version:
+        error(f".deb version mismatch: package={pkg_version!r} expected={version!r}")
+        sys.exit(1)
+    ok(f".deb metadata: version {pkg_version}")
+
+    staging = root / "installer" / "dist" / ".verify_stage"
+    staging.exists() and shutil.rmtree(staging)
+    staging.mkdir(parents=True)
+    subprocess.run(["dpkg-deb", "-x", str(deb), str(staging)], cwd=root, check=True, capture_output=True)
+
+    expected_payload = [
+        staging / "opt/bimos/lib/bimos.bin",
+        staging / "usr/bin/bimos",
+        staging / "usr/share/applications/bimos.desktop",
+        staging / "usr/share/doc/bimos/README.md",
+        staging / "opt/bimos/dockers/Dockerfile.bimos",
+    ]
+    missing = [p.relative_to(staging) for p in expected_payload if not p.exists()]
+    # Legal docs are best-effort: flagged at packaging time, not structural failures
+    optional_payload = [
+        ("LICENSE", staging / "usr/share/doc/bimos/LICENSE"),
+        ("NOTICE.md", staging / "usr/share/doc/bimos/NOTICE.md"),
+        ("TERMS.md", staging / "usr/share/doc/bimos/TERMS.md"),
+        ("PRIVACY.md", staging / "usr/share/doc/bimos/PRIVACY.md"),
+    ]
+    optional_missing = [name for name, p in optional_payload if not p.exists()]
+    if missing:
+        error(f".deb payload missing {len(missing)} file(s):")
+        for m in missing:
+            print(f"         {m}")
+        shutil.rmtree(staging)
+        sys.exit(1)
+    if optional_missing:
+        warn(f"Legal docs omitted from .deb: {', '.join(optional_missing)} (source files now "
+             "exist — rebuilding will include them; see package_linux_deb mappings)")
+    else:
+        ok("Legal docs included: LICENSE, NOTICE, TERMS, PRIVACY")
+    ok("Payload: binary, wrapper, desktop entry, docs and dockers present")
+
+    dist_binary = root / "backend" / "dist" / "main.dist" / "bimos.bin"
+    pkg_binary = staging / "opt/bimos/lib/bimos.bin"
+    if dist_binary.exists():
+        h1 = subprocess.run(["sha256sum", str(dist_binary)], capture_output=True, text=True).stdout.split()[0]
+        h2 = subprocess.run(["sha256sum", str(pkg_binary)], capture_output=True, text=True).stdout.split()[0]
+        if h1 != h2:
+            error("Packaged binary hash differs from dist/main.dist/bimos.bin")
+            print(f"         dist={h1}")
+            print(f"         .deb={h2}")
+            shutil.rmtree(staging)
+            sys.exit(1)
+        ok("Packaged binary hash == dist binary hash")
+
+    shutil.rmtree(staging)
+    ok(f".deb audit clean → {deb.name}")
+
+
+def verify_all(root: Path, version: str):
+    info("Verifying build artifacts (no compilation)...")
+    smoke_test_binary(root, version)
+    check_stripped(root)
+    check_runtime_libs(root)
+    write_manifests(root)
+    verify_deb(root, version)
 
 
 # ── Installer builders ───────────────────────────────────────────────────────
@@ -114,7 +282,7 @@ def package_linux_deb(root: Path, version: str):
         "--architecture",   "amd64",
         "--description",    "Biomolecular Modeling Suite — virtual screening, docking, MD and QM",
         "--url",            "https://github.com/RenatoJVA/BIMOS",
-        "--maintainer",     "Renato J. V. A. <renatojva@example.com>",
+        "--maintainer",     "Renato J. V. A. <https://github.com/RenatoJVA/BIMOS/issues>",
         "--license",        "GPLv3",
         "--category",       "science",
         "--deb-recommends", "docker.io (>= 20.0)",
@@ -141,6 +309,15 @@ def package_linux_deb(root: Path, version: str):
         (str(root / "installer" / "assets" / "bimos.desktop"),
                                                           "/usr/share/applications/bimos.desktop"),
     ]
+
+    # Legal documents shipped with every package (GPLv3 + third-party notices
+    # + terms of use + privacy policy). Debian/FPM convention: /usr/share/doc.
+    for doc in ("LICENSE", "NOTICE.md", "TERMS.md", "PRIVACY.md"):
+        doc_path = root / doc
+        if doc_path.exists():
+            file_mappings.append((str(doc_path), f"/usr/share/doc/bimos/{doc}"))
+        else:
+            warn(f"{doc} not found — package will omit it")
 
     # Dockers: map contents directly (avoid double nesting)
     dockers_src = root / "backend" / "dockers"
@@ -197,12 +374,31 @@ def package_windows_nsis(root: Path, version: str):
             r"{\rtf1\ansi\ansicpg1252\deff0\deflang1033"
             r"{\fonttbl{\f0\fnil\fcharset0 Courier New;}}"
             r"{\*\generator Riched20 6.00.3790;}\viewkind4\uc1\pard\f0\fs20"
-            r"BIMOS — Biomolecular Modeling Suite\par"
+            r"BIMOS \x97 Biomolecular Modeling Suite\par"
             r"\par"
-            r"This software is provided as-is. See project LICENSE for terms.\par"
+            r"BIMOS is free software licensed under the GNU General Public License\par"
+            r"version 3 (GPLv3). The full license text is in the file LICENSE.rtf\par"
+            r"next to this installer and in docs/LICENSE after installation.\par"
+            r"\par"
+            r"BIMOS is provided without warranty, as described in TERMS.md.\par"
+            r"Bundled third-party components (GROMACS, AutoDock Vina, Boltz, Meeko,\par"
+            r"RDKit, PyTorch and system libraries) keep their own licenses; see\par"
+            r"docs/NOTICE.md. ORCA and Gaussian 16 are NOT distributed with BIMOS.\par"
             r"}", encoding='utf-8'
         )
         ok(f"Created default LICENSE.rtf")
+
+    # Stage legal documents for the Windows package ($INSTDIR\docs)
+    legal_dir = out_dir / "legal-docs"
+    if legal_dir.exists():
+        shutil.rmtree(legal_dir)
+    legal_dir.mkdir(parents=True, exist_ok=True)
+    for doc in ("LICENSE", "NOTICE.md", "TERMS.md", "PRIVACY.md"):
+        doc_path = root / doc
+        if doc_path.exists():
+            shutil.copy2(doc_path, legal_dir / doc)
+        else:
+            warn(f"{doc} not found — Windows package will omit it")
 
     # Create README.md if missing
     readme_file = root / "README.md"
@@ -236,8 +432,10 @@ def package_windows_nsis(root: Path, version: str):
     readme_path = str(readme_file).replace("\\", "\\\\")
     dockers_path = str(dockers_dir).replace("\\", "\\\\")
     license_path = str(license_file).replace("\\", "\\\\")
+    legal_docs_path = str(legal_dir).replace("\\", "\\\\")
     
     nsi_patched = nsi_patched.replace("LICENSE_FILE_PATH", license_path)
+    nsi_patched = nsi_patched.replace("LEGAL_DOCS_DIR_PATH", legal_docs_path)
     nsi_patched = nsi_patched.replace("BINARY_DIR_PATH", binary_path)
     nsi_patched = nsi_patched.replace("README_FILE_PATH", readme_path)
     nsi_patched = nsi_patched.replace("DOCKERS_DIR_PATH", dockers_path)
@@ -294,7 +492,7 @@ def package_macos_dmg(root: Path, version: str):
 
     script = root / "installer" / "build_dmg.sh"
     script.chmod(0o755)
-    run(["bash", str(script)], cwd=root)
+    run(["bash", str(script), version], cwd=root)
     ok(f"macOS DMG ready → installer/dist/BIMOS-{version}.dmg")
 
 
@@ -320,6 +518,7 @@ def parse_args():
     p.add_argument("--skip-frontend",  action="store_true", help="Skip building/syncing the frontend")
     p.add_argument("--skip-nuitka",    action="store_true", help="Skip Nuitka compilation")
     p.add_argument("--skip-installer", action="store_true", help="Only compile, no installer")
+    p.add_argument("--verify",         action="store_true", help="Verify existing artifacts only: smoke test, stripped ELF, SHA256SUMS, .deb audit")
     p.add_argument(
         "--target",
         choices=["linux", "windows", "macos"],
@@ -340,6 +539,10 @@ def main():
     print(f"\n\033[1;35m{'─'*55}\033[0m")
     print(f"\033[1;35m  BIMOS Builder  v{version}  →  {target.upper()}\033[0m")
     print(f"\033[1;35m{'─'*55}\033[0m")
+
+    if args.verify:
+        verify_all(root, version)
+        return
 
     # ── Step 1: Frontend ────────────────────────────────────
     if not args.skip_frontend:
@@ -369,6 +572,12 @@ def main():
             package_windows_nsis(root, version)
         elif target == "macos":
             package_macos_dmg(root, version)
+
+    # ── Step 4: Verify artifacts ────────────────────────────
+    if not args.skip_nuitka:
+        verify_all(root, version)
+    else:
+        warn("Skipping verification (no build)")
 
     # ── Done ────────────────────────────────────────────────
     print(f"\n\033[1;32m{'─'*55}\033[0m")

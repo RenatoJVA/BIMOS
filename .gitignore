@@ -27,6 +27,9 @@ backend/mutants/
 # Node.js (Frontend)
 node_modules/
 frontend/dist/
+
+# Pixi hermetic environment (reproducible via backend/pixi.toml + pixi.lock)
+backend/.pixi/
 .eslintcache
 
 # Scientific Data & Jobs
@@ -69,6 +72,8 @@ backend/htmlcov/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+test/outputs/
+private/tools/tooling/
 
 # Local database files
 *.db

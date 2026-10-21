@@ -22,7 +22,7 @@
 
 ## Features
 
-- **Protein Structure Prediction** — Predict 3D structures from amino acid sequences using ESMFold and Boltz-1.
+- **Protein Structure Prediction** — Predict 3D structures from amino acid sequences using Boltz-1 (GPU).
 - **Molecular Docking** — High-throughput virtual screening with AutoDock Vina using built-in curated ligand databases.
 - **Molecular Dynamics** — Automated GROMACS simulation pipeline (solvation, ionization, minimization, NVT, NPT, production).
 - **Quantum Mechanics** — Automated Hirshfeld charge refinement via ORCA or Gaussian 16 pipelines with `.itp` integration.
@@ -110,18 +110,20 @@ BIMOS orchestrates several third-party computational tools. Open-source tools ar
 | Tool | Category | License | Bundled? |
 |------|----------|---------|----------|
 | Docker / Podman | Container runtime | Apache 2.0 | No (install separately — Podman recommended) |
-| AutoDock Vina | Molecular docking | Apache 2.0 | Yes (via Docker) |
-| GROMACS | Molecular dynamics | GPLv2 | Yes (via Docker) |
-| ESMFold | Structure prediction | MIT | Yes (via Docker) |
-| Boltz-1 | Structure prediction | MIT | Yes (via Docker) |
-| RDKit / Meeko | Cheminformatics | BSD | Yes (via Docker) |
-| **ORCA** | Quantum chemistry | **Commercial** | **No** |
-| **Gaussian 16** | Quantum chemistry | **Commercial** | **No** |
+| AutoDock Vina | Molecular docking | Apache 2.0 | Yes (image) |
+| GROMACS | Molecular dynamics | GPL-2.0-or-later | Yes (image) |
+| Boltz (code + weights) | Structure prediction | MIT | Yes (image) |
+| Meeko | Cheminformatics | LGPL-2.1 | Yes (image, pinned v0.7.1) |
+| RDKit / PyTorch | Cheminformatics / ML | BSD | Yes (image) |
+| FFTW3 / MPI / CUDA / Ubuntu | System base | GPL / EULA / various | Yes (image base) |
+| OpenBabel | Format conversion | GPL-2.0 | No (host prerequisite for QM) |
+| **ORCA** | Quantum chemistry | **Commercial** | **No (user-licensed, never distributed)** |
+| **Gaussian 16** | Quantum chemistry | **Commercial** | **No (user-licensed, never distributed)** |
 
 > [!WARNING]
-> **BIMOS does not provide, distribute, or grant licenses for ORCA or Gaussian.** Users must purchase or obtain their own valid licenses from the respective vendors. BIMOS simply provides automation scripts that call these tools if they are already installed on your system.
+> **BIMOS does not provide, distribute, or grant licenses for ORCA or Gaussian.** Users must purchase or obtain their own valid licenses from the respective vendors. BIMOS only automates calls to these tools if they are already installed and licensed on your host — it grants no rights over them and is not affiliated with their vendors. You are responsible for complying with their license terms.
 >
-> The Docker image built by `bimos setup` contains only open-source tools (AutoDock Vina, GROMACS, ESMFold, Boltz-1, RDKit) under their respective licenses.
+> The Docker image built by `bimos setup` contains only open-source tools (AutoDock Vina, GROMACS, Boltz, Meeko, RDKit, PyTorch, plus system libraries) under their respective licenses. See [NOTICE.md](./NOTICE.md) for the complete list, [TERMS.md](./TERMS.md) for the terms of use, and [PRIVACY.md](./PRIVACY.md) for the data policy.
 
 ### Limitation of Liability
 
@@ -151,7 +153,7 @@ If you use BIMOS in your research, teaching, or commercial work, you **must cite
 
 **Repository:** [https://github.com/RenatoJVA/BIMOS](https://github.com/RenatoJVA/BIMOS)
 
-Please also cite the individual tools used in your workflow (GROMACS, AutoDock Vina, ESMFold, Boltz-1, ORCA, Gaussian, etc.) according to their respective guidelines.
+Please also cite the individual tools used in your workflow (GROMACS, AutoDock Vina, Boltz-1/2, Meeko, ORCA, Gaussian, ColabFold for MSA generation, etc.) according to their respective guidelines.
 
 ## Team
 

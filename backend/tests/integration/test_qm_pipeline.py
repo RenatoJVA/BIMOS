@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from bimos.config.settings import settings
 from bimos.quantum_chemistry.itp import update_itp_charges
 from bimos.quantum_chemistry.pipeline import GaussianPipeline, OrcaPipeline
 
@@ -73,12 +74,22 @@ def test_update_itp_charges_mismatch_raises(tmp_path: Path) -> None:
 
 
 def test_orca_pipeline_no_binary(tmp_path: Path) -> None:
+    """The missing-binary path is what is under test, not the absence of ORCA.
+
+    A developer machine (or CI image) that has ORCA installed would otherwise
+    fail this test for the wrong reason.
+    """
+    if settings.orca_path and Path(settings.orca_path).exists():
+        pytest.skip(f"ORCA is installed at {settings.orca_path}")
     pipeline = OrcaPipeline(output_dir=str(tmp_path))
     with pytest.raises(FileNotFoundError, match="ORCA binary not found"):
         pipeline.run(directory=str(tmp_path))
 
 
 def test_gaussian_pipeline_no_binary(tmp_path: Path) -> None:
+    """See test_orca_pipeline_no_binary: skipped when Gaussian is installed."""
+    if settings.gaussian_path and Path(settings.gaussian_path).exists():
+        pytest.skip(f"Gaussian is installed at {settings.gaussian_path}")
     pipeline = GaussianPipeline(output_dir=str(tmp_path))
     with pytest.raises(FileNotFoundError, match="Gaussian binary not found"):
         pipeline.run(directory=str(tmp_path))

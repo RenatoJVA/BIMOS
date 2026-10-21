@@ -9,7 +9,7 @@ backend/
 │   ├── api/              # FastAPI REST server
 │   ├── config/           # Configuration & settings
 │   ├── docking/          # AutoDock Vina pipeline
-│   ├── prediction/       # ESMFold & Boltz-1 pipelines
+│   ├── prediction/       # Boltz pipeline
 │   ├── molecular_dynamics/  # GROMACS pipeline
 │   ├── quantum_chemistry/   # ORCA & Gaussian pipelines
 │   ├── infrastructure/   # Container, job store, database

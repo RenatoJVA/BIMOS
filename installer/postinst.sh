@@ -29,27 +29,24 @@ fi
 
 echo "BIMOS installed successfully."
 
-# ── Docker Check Warning ──────────────────────────────────
-MISSING_DEPS=""
-if ! command -v docker >/dev/null 2>&1; then
-    MISSING_DEPS="docker (or docker-ce)"
-fi
-if ! docker compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
-    if [ -n "$MISSING_DEPS" ]; then
-        MISSING_DEPS="$MISSING_DEPS and docker-compose-plugin"
-    else
-        MISSING_DEPS="docker-compose-plugin"
-    fi
+# ── Container runtime check warning ────────────────────────
+# BIMOS prefers Podman but supports Docker; either is acceptable.
+RUNTIME=""
+if command -v podman >/dev/null 2>&1; then
+    RUNTIME="podman"
+elif command -v docker >/dev/null 2>&1; then
+    RUNTIME="docker"
 fi
 
-if [ -n "$MISSING_DEPS" ]; then
+if [ -z "$RUNTIME" ]; then
     echo "--------------------------------------------------------"
-    echo "⚠️  WARNING: BIMOS requires Docker to run molecular pipelines,"
-    echo "   but $MISSING_DEPS could not be found."
-    echo "   Please make sure Docker and Docker Compose are installed:"
-    echo "   https://docs.docker.com/engine/install/"
+    echo "⚠️  WARNING: BIMOS requires a container runtime to run"
+    echo "   molecular pipelines, but neither podman nor docker was"
+    echo "   found. Install one of:"
+    echo "     https://podman.io/docs/installation"
+    echo "     https://docs.docker.com/engine/install/"
     echo "--------------------------------------------------------"
 fi
 
-echo "Launch with:  bimos BIMOS_GUI"
+echo "Launch with:  bimos -g"
 echo "Or open the BIMOS shortcut in your application menu."

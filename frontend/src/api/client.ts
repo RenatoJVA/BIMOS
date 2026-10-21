@@ -75,12 +75,12 @@ export function launchPrediction(params: JsonParams): Promise<Job> {
   });
 }
 
-interface FileParams {
+export interface FileParams {
   max_resources: boolean;
   [k: string]: unknown;
 }
 
-function fileBody(fields: Record<string, File | string | number | boolean>): FormData {
+function fileBody(fields: Record<string, File | string | number | boolean | undefined | null>): FormData {
   const form = new FormData();
   for (const [key, value] of Object.entries(fields)) {
     if (value === undefined || value === null) continue;
@@ -89,10 +89,25 @@ function fileBody(fields: Record<string, File | string | number | boolean>): For
   return form;
 }
 
-export function launchDock(files: { protein: File; ligands: File }, params: Omit<FileParams, 'max_resources'> & FileParams): Promise<Job> {
+export interface DockGridParams {
+  center_x?: number;
+  center_y?: number;
+  center_z?: number;
+  size_x?: number;
+  size_y?: number;
+  size_z?: number;
+  pocket_residues?: string;
+  padding?: number;
+}
+
+export function launchDock(
+  files: { protein: File; ligands: File; reference?: File },
+  params: Omit<FileParams, 'max_resources'> & FileParams & DockGridParams,
+): Promise<Job> {
   const form = fileBody({
     protein: files.protein,
     ligands: files.ligands,
+    reference: files.reference,
     ...params,
   });
   return request<Job>('/dock', { method: 'POST', body: form });

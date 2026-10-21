@@ -18,6 +18,11 @@ from bimos.infrastructure import cancellation
 from bimos.quantum_chemistry.config import GaussianConfig, OrcaConfig
 from bimos.quantum_chemistry.elements import atomic_number
 from bimos.quantum_chemistry.itp import update_itp_charges
+from bimos.shared.ligand_identity import (
+    count_gro_atoms,
+    count_itp_atoms,
+    resolve_ligand_identity,
+)
 from bimos.shared.pipeline import Pipeline
 from bimos.shared.templates import render_template
 
@@ -160,6 +165,24 @@ class OrcaPipeline(QMPipeline):
                 self.log(f"Skipping {gro.name}: ITP missing or ORCA failed", logging.WARNING)
                 continue
 
+            candidate = gro.stem
+            try:
+                identity = resolve_ligand_identity(gro, itp)
+                n_gro, n_itp = count_gro_atoms(gro), count_itp_atoms(itp)
+                self.log(
+                    f"[{candidate}] internal gro={identity.gro_resname} "
+                    f"itp={identity.itp_moleculetype} atoms gro={n_gro} itp={n_itp}"
+                )
+                if n_gro != n_itp:
+                    self.log(
+                        f"Skipping {gro.name}: GRO atoms ({n_gro}) != ITP ({n_itp})",
+                        logging.WARNING,
+                    )
+                    continue
+            except ValueError as exc:
+                self.log(f"Skipping {gro.name}: unreadable identity ({exc})", logging.WARNING)
+                continue
+
             charges: list[float] = []
             inside = False
             with open(out, encoding="utf-8") as handle:
@@ -175,7 +198,14 @@ class OrcaPipeline(QMPipeline):
                             charges.append(float(match.group(1)))
 
             if charges:
-                self.log(f"Updating {itp.name} with {len(charges)} charges")
+                if len(charges) != n_itp:
+                    self.log(
+                        f"Skipping {gro.name}: {n_itp} ITP atoms vs "
+                        f"{len(charges)} charges [{candidate}]",
+                        logging.WARNING,
+                    )
+                    continue
+                self.log(f"Updating {itp.name} with {len(charges)} charges [{candidate}]")
                 results.append(str(update_itp_charges(itp, charges)))
 
         return {"status": "completed", "results": results}
@@ -255,6 +285,24 @@ class GaussianPipeline(QMPipeline):
                 self.log(f"Skipping {gro.name}: ITP missing or Gaussian failed", logging.WARNING)
                 continue
 
+            candidate = gro.stem
+            try:
+                identity = resolve_ligand_identity(gro, itp)
+                n_gro, n_itp = count_gro_atoms(gro), count_itp_atoms(itp)
+                self.log(
+                    f"[{candidate}] internal gro={identity.gro_resname} "
+                    f"itp={identity.itp_moleculetype} atoms gro={n_gro} itp={n_itp}"
+                )
+                if n_gro != n_itp:
+                    self.log(
+                        f"Skipping {gro.name}: GRO atoms ({n_gro}) != ITP ({n_itp})",
+                        logging.WARNING,
+                    )
+                    continue
+            except ValueError as exc:
+                self.log(f"Skipping {gro.name}: unreadable identity ({exc})", logging.WARNING)
+                continue
+
             charges: list[float] = []
             inside = False
             with open(log_path, encoding="utf-8") as handle:
@@ -272,7 +320,14 @@ class GaussianPipeline(QMPipeline):
                         charges.append(float(match.group(3)))
 
             if charges:
-                self.log(f"Updating {itp.name} with {len(charges)} charges")
+                if len(charges) != n_itp:
+                    self.log(
+                        f"Skipping {gro.name}: {n_itp} ITP atoms vs "
+                        f"{len(charges)} charges [{candidate}]",
+                        logging.WARNING,
+                    )
+                    continue
+                self.log(f"Updating {itp.name} with {len(charges)} charges [{candidate}]")
                 results.append(str(update_itp_charges(itp, charges)))
 
         return {"status": "completed", "results": results}

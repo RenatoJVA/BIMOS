@@ -5,7 +5,7 @@ description = "Biomolecular Modeling Suite — CLI-first backend"
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [
-    { name = "Renato J. V. A.", email = "renatojva@example.com" },
+    { name = "Renato J. V. A.", email = "renato.vace@gmail.com" },
 ]
 dependencies = [
     "click>=8.1.7",
@@ -109,7 +109,9 @@ select = [
     "PLE", "PLR",
     "RUF",
 ]
-ignore = ["E501"]
+# CLI click commands and pipeline entry points legitimately take many explicit
+# keyword arguments; PLR0917 (positional-arg cap) flags those boundaries only.
+ignore = ["E501", "PLR0917"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI treats File()/Form()/Depends() as immutable default-args descriptors
@@ -138,11 +140,19 @@ extend-immutable-calls = ["fastapi.File", "fastapi.Form", "fastapi.Path", "fasta
 # High-branch monolithic MD pipeline runner: validated by integration tests.
 "bimos/molecular_dynamics/pipeline.py" = ["PLR0912", "PLR0915", "PLR2004"]
 "bimos/docking/pipeline.py" = ["PLR0915", "PLR0913"]
+# Build script shells out to bun/nuitka/upx by name from $PATH with argv arrays;
+# no user-free-text is interpolated. Single high-branch orchestration function.
+"build.py" = ["S603", "S607", "PLR0912", "PLR0915"]
 # Click command groups with many options: standard click pattern.
 "bimos/cli/main.py" = ["PLR0913"]
+"bimos/cli/commands/screen.py" = ["PLR0913"]
+"bimos/screening/cascade.py" = ["PLR0913"]
 "bimos/cli/commands/dock.py" = ["PLR0913"]
 "bimos/cli/commands/predict.py" = ["PLR0913"]
 "bimos/cli/commands/workflow.py" = ["PLR0913"]
+"bimos/cli/commands/qm.py" = ["PLR0913"]
+# Shared job-lifecycle helper takes the full foreground/background/GUI context.
+"bimos/cli/utils.py" = ["PLR0913"]
 # Tests intentionally use assert (pytest idiom), literal values, and fixtures
 # with unused parameters (dependency injection by name).
 "tests/**/*.py" = ["S101", "PLR2004", "ARG001", "ARG002", "ARG005", "S108", "SIM117", "PLR0913", "F841", "RUF059"]

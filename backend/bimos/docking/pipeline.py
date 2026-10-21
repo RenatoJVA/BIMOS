@@ -5,6 +5,7 @@ Molecular docking pipeline using AutoDock Vina.
 from __future__ import annotations
 
 import logging
+import math
 import shutil
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -12,7 +13,14 @@ from pathlib import Path
 from typing import Any
 
 from bimos.config.settings import settings
-from bimos.docking.config import DockingConfig
+from bimos.docking.config import DockingConfig, _check_size
+from bimos.docking.pocket import (
+    LARGE_BOX_WARN,
+    box_from_extent,
+    center_from_residues,
+    parse_pocket_residues,
+    read_sdf_first_molecule_coords,
+)
 from bimos.docking.sdf import split_multi_molecule_sdf
 from bimos.infrastructure import container
 from bimos.shared.paths import SCRIPTS_DIR
@@ -34,10 +42,35 @@ class DockingPipeline(Pipeline):
         output_dir: str | Path | None = None,
         on_output: Callable[[str], None] | None = None,
         max_mode: bool | None = None,
+        center: tuple[float, float, float] | list[float] | None = None,
+        size: tuple[float, float, float] | list[float] | None = None,
+        center_on: str | Path | None = None,
+        pocket_residues: str | None = None,
+        padding: float | None = None,
         **vina_overrides: Any,
     ) -> None:
         super().__init__(output_dir, on_output)
         self.config = DockingConfig.resolve(max_mode=max_mode, **vina_overrides)
+        # Fail fast: validate the requested search box before any container work.
+        self.req_center = _check_triplet(center, "center")
+        self.req_size = _check_triplet(size, "size")
+        if self.req_size is not None:
+            names = ("size_x", "size_y", "size_z")
+            self.req_size = tuple(_check_size(v, n) for v, n in zip(self.req_size, names, strict=True))
+        self.req_center_on = Path(center_on) if center_on else None
+        if self.req_center_on is not None and not self.req_center_on.exists():
+            raise FileNotFoundError(f"Reference ligand not found: {self.req_center_on}")
+        self.req_pocket = parse_pocket_residues(pocket_residues) if pocket_residues else None
+        self.req_padding = float(padding) if padding is not None else None
+        if self.req_padding is not None and self.req_padding < 0:
+            raise ValueError(f"Invalid padding {padding}: must be >= 0.")
+        _check_grid_combo(
+            center=self.req_center,
+            size=self.req_size,
+            center_on=self.req_center_on,
+            pocket=self.req_pocket,
+            padding=self.req_padding,
+        )
 
         self.proteins_dir = self.output_dir / "proteins"
         self.ligands_dir = self.output_dir / "ligands"
@@ -69,7 +102,26 @@ class DockingPipeline(Pipeline):
                         continue
         return xs, ys, zs
 
-    def _write_grid_box_conf(self, pdbqt_path: Path, conf_path: Path) -> None:
+    def _resolve_grid(self, pdbqt_path: Path) -> tuple[str, tuple[float, ...], tuple[float, ...]]:
+        """Effective ``(mode, center, size)``: explicit > center-on > pocket > yaml > auto."""
+        padding = self.req_padding if self.req_padding is not None else self.config.margin
+        if self.req_center is not None or self.req_size is not None:
+            if self.req_center is None or self.req_size is None:
+                raise ValueError("--center and --size must be provided together.")
+            return "manual", self.req_center, self.req_size
+        if self.req_center_on is not None:
+            coords, _ = read_sdf_first_molecule_coords(self.req_center_on)
+            xs = [c[0] for c in coords]
+            ys = [c[1] for c in coords]
+            zs = [c[2] for c in coords]
+            center = (sum(xs) / len(xs), sum(ys) / len(ys), sum(zs) / len(zs))
+            span = (max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs))
+            self.log(f"Center from reference {self.req_center_on.name} ({len(coords)} atoms)")
+            return "center-on", center, box_from_extent(span, padding)
+        if self.req_pocket is not None:
+            center, n, span = center_from_residues(pdbqt_path, self.req_pocket)
+            self.log(f"Center from {len(self.req_pocket)} residues ({n} atoms)")
+            return "pocket", center, box_from_extent(span, padding)
         if self.config.grid_mode == "manual":
             required = (
                 self.config.center_x,
@@ -83,17 +135,37 @@ class DockingPipeline(Pipeline):
                 raise ValueError(
                     "grid.mode is 'manual' but center/size coordinates are missing in docking.yaml"
                 )
-            cx, cy, cz = (round(v, 3) for v in required[:3])  # type: ignore[arg-type]
-            sx, sy, sz = (round(v, 3) for v in required[3:])  # type: ignore[arg-type]
-        else:
+            return (
+                "manual",
+                tuple(required[:3]),  # type: ignore[arg-type]
+                tuple(required[3:]),  # type: ignore[arg-type]
+            )
+        xs, ys, zs = self._read_coords(pdbqt_path)
+        if not xs:
+            raise ValueError(f"No ATOM/HETATM coordinates found in {pdbqt_path}")
+        center = tuple(sum(values) / len(values) for values in (xs, ys, zs))
+        size = tuple(max(values) - min(values) + self.config.margin for values in (xs, ys, zs))
+        return "auto", center, size
+
+    def _write_grid_box_conf(self, pdbqt_path: Path, conf_path: Path) -> None:
+        mode, center, size = self._resolve_grid(pdbqt_path)
+        cx, cy, cz = (round(v, 3) for v in center)
+        sx, sy, sz = (round(v, 3) for v in size)
+        if any(v > LARGE_BOX_WARN for v in (sx, sy, sz)):
+            self.log(
+                f"Grid {mode}: large box ({sx}x{sy}x{sz} A) — "
+                "covers much of the receptor (nearly blind)",
+                logging.WARNING,
+            )
+        if mode != "auto":
             xs, ys, zs = self._read_coords(pdbqt_path)
-            if not xs:
-                raise ValueError(f"No ATOM/HETATM coordinates found in {pdbqt_path}")
-            cx, cy, cz = [round(sum(values) / len(values), 3) for values in (xs, ys, zs)]
-            sx, sy, sz = [
-                round(max(values) - min(values) + self.config.margin, 3)
-                for values in (xs, ys, zs)
-            ]
+            if xs and (
+                cx - sx / 2 <= min(xs) and cx + sx / 2 >= max(xs)
+                and cy - sy / 2 <= min(ys) and cy + sy / 2 >= max(ys)
+                and cz - sz / 2 <= min(zs) and cz + sz / 2 >= max(zs)
+            ):
+                self.log("Targeted grid covers the WHOLE receptor (de facto blind)", logging.WARNING)
+        self.log(f"Grid {mode}: center=({cx}, {cy}, {cz}) size=({sx}, {sy}, {sz})")
         conf_path.write_text(
             render_template(
                 VINA_TEMPLATE,
@@ -291,6 +363,41 @@ class DockingPipeline(Pipeline):
             "results": final_results,
             "output_dir": str(self.output_dir),
         }
+
+
+_TRIPLET_LEN = 3
+
+
+def _check_triplet(value: tuple[float, float, float] | list[float] | None, name: str) -> tuple[float, float, float] | None:
+    if value is None:
+        return None
+    try:
+        items = tuple(float(v) for v in value)
+    except (TypeError, ValueError):
+        raise ValueError(f"--{name} requires 3 numbers (e.g. --{name} 12.5 3.1 -0.4).") from None
+    if len(items) != _TRIPLET_LEN:
+        raise ValueError(f"--{name} requires exactly {_TRIPLET_LEN} numbers (got {len(items)}).")
+    if any(math.isnan(v) or math.isinf(v) for v in items):
+        raise ValueError(f"--{name} contains non-finite values.")
+    return items  # type: ignore[return-value]
+
+
+def _check_grid_combo(
+    center: tuple[float, float, float] | None,
+    size: tuple[float, float, float] | None,
+    center_on: Path | None,
+    pocket: list[tuple[str | None, int]] | None,
+    padding: float | None,
+) -> None:
+    if (center is None) != (size is None):
+        raise ValueError("--center and --size must be provided together.")
+    derived = [s for s in (center_on is not None, pocket is not None) if s]
+    if center is not None and derived:
+        raise ValueError("--center/--size is incompatible with --center-on/--pocket-residues (pick one).")
+    if center_on is not None and pocket is not None:
+        raise ValueError("--center-on and --pocket-residues are mutually exclusive (pick one).")
+    if padding is not None and center_on is None and pocket is None:
+        raise ValueError("--padding only applies with --center-on or --pocket-residues.")
 
 
 def run_docking_pipeline(**kwargs: Any) -> dict[str, Any]:

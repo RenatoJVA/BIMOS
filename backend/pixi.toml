@@ -1,0 +1,59 @@
+[workspace]
+authors = ["CIIM <lab.ciim@ucsm.edu.pe>"]
+channels = ["conda-forge"]
+description = "BIMOS hermetic build & runtime environment (Qt6 GUI, Nuitka toolchain, bun frontend)"
+name = "bimos"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[dependencies]
+python = "3.12.*"
+
+# Qt6 GUI stack — binding PyQt6 conda (mismo binding del .deb vigente).
+# Qt6/brotli resuelven dentro del env: sin conflicto con el brotli del host
+# (causa raiz del GUI roto desde source: anaconda pinneaba brotli 1.0.9).
+pyqt6 = ">=6.11"
+pyqt6-webengine = ">=6.11"
+qtpy = ">=2.4.3"
+pywebview = ">=6.2.1"
+
+# Runtime API
+click = ">=8.1.7"
+fastapi = ">=0.115.0"
+uvicorn = ">=0.30.0"
+python-multipart = ">=0.0.9"
+pydantic = ">=2.7.0"
+python-dotenv = ">=1.0.0"
+pyyaml = ">=6.0.3"
+rich-click = ">=1.9.7"
+sqlalchemy = ">=2.0.30"
+psycopg = ">=3.2"
+psutil = ">=6.0"
+
+# Build toolchain
+nuitka = ">=4.3"
+ccache = ">=4.14"
+bun = ">=1.4.2"
+ruff = ">=0.17"
+
+[pypi-dependencies]
+bimos = { path = ".", editable = true }
+
+[feature.dev.dependencies]
+pytest = "*"
+pytest-asyncio = "*"
+httpx = "*"
+
+[environments]
+default = ["dev"]
+
+[tasks]
+dev = { cmd = "python -m bimos.cli.main --gui" }
+gui = { cmd = "python -m bimos.cli.main --gui" }
+api = { cmd = "python -m bimos.cli.main --gui --headless" }
+headless = { cmd = "python -m bimos.cli.main --gui --headless" }
+test = { cmd = "python -m pytest tests/unit tests/integration tests/security tests/performance -q" }
+lint = { cmd = "ruff check bimos/ tests/" }
+build = { cmd = "python build.py" }
+builder = { cmd = "python ../builder.py" }
+verify = { cmd = "python ../builder.py --verify" }

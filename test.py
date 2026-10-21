@@ -13,6 +13,7 @@ TEST = ROOT / "test"
 LOGS = TEST / "logs"
 
 OVERALL = {"pass": 0, "fail": 0, "skip": 0}
+ONLY: set[str] = set()
 
 # ── CLI detection (cross-platform) ─────────────────────────────────────────
 
@@ -186,7 +187,16 @@ def create_fastas():
 
 # ── Pipeline runner ───────────────────────────────────────────────────────
 
-ERROR_MARKERS = ("Error:", "Error while", "Traceback", "ModuleNotFoundError", "exited with code")
+ERROR_MARKERS = (
+    "Error:",
+    "Error while",
+    "Traceback",
+    "ModuleNotFoundError",
+    "exited with code",
+    "─ Error",
+    "not found",
+    "must not be",
+)
 
 def _check_error(log_text: str) -> str | None:
     for line in log_text.splitlines():
@@ -211,6 +221,12 @@ def _reader_thread(stream, log_file):
         stream.close()
 
 def run_pipeline(label, cli_args, *, clean_output=False, timeout=120):
+    if ONLY and not any(k in label.lower() for k in ONLY):
+        print(f"\n{'=' * 70}")
+        print(f"  >>> {label}")
+        print("  [SKIP] excluded by --only")
+        OVERALL["skip"] += 1
+        return
     cmd = CLI + ["--max"] + list(cli_args)
     LOGS.mkdir(parents=True, exist_ok=True)
     safe = (
@@ -341,6 +357,11 @@ def preflight() -> bool:
 # ── Main ──────────────────────────────────────────────────────────────────
 
 def main():
+    for a in sys.argv[1:]:
+        if a.startswith("--only="):
+            ONLY.update(x.strip().lower() for x in a.split("=", 1)[1].split(",") if x.strip())
+    if ONLY:
+        print(f"  [INFO] --only filter: {sorted(ONLY)}")
     print("=" * 70)
     print("  BIMOS Integration Test")
     print(f"  Started: {datetime.now()}")
@@ -355,6 +376,8 @@ def main():
     backup_boltz()
     inject_configs()
     create_fastas()
+    for sub in ("APO", "HOLO", "DOCKING", "PREDICT_ESM", "PREDICT_BOLTZ"):
+        (TEST / "outputs" / sub).mkdir(parents=True, exist_ok=True)
 
     try:
         run_pipeline("Setup", ["setup", "--config-only"], timeout=60)
@@ -366,7 +389,7 @@ def main():
                 "--protein",
                 str(TEST / "APO" / "1AKI.pdb"),
                 "-o",
-                str(TEST / "APO" / "output"),
+                str(TEST / "outputs" / "APO"),
             ],
             clean_output=True,
             timeout=300,
@@ -383,7 +406,7 @@ def main():
                 "--ligand-itp",
                 str(TEST / "HOLO" / "JZ4.itp"),
                 "-o",
-                str(TEST / "HOLO" / "output"),
+                str(TEST / "outputs" / "HOLO"),
             ],
             clean_output=True,
             timeout=300,
@@ -396,7 +419,7 @@ def main():
                 str(TEST / "DOCKING" / "3HTB.pdb"),
                 str(TEST / "DOCKING" / "JZ4.sdf"),
                 "-o",
-                str(TEST / "DOCKING" / "output"),
+                str(TEST / "outputs" / "DOCKING"),
             ],
             clean_output=True,
             timeout=120,
@@ -408,23 +431,23 @@ def main():
         #         "predict",
         #         str(TEST / "PREDICT" / "ubiquitin.fasta"),
         #         "-o",
-        #         str(TEST / "PREDICT" / "esm_output"),
+        #         str(TEST / "outputs" / "PREDICT_ESM"),
         #     ],
         #     clean_output=True,
         #     timeout=600,
         # )
 
-        # run_pipeline(
-#     "Predict Boltz (lysozyme)",
-#     [
-#         "predict-boltz",
-#         str(TEST / "PREDICT" / "lysozyme.fasta"),
-#         "-o",
-#         str(TEST / "PREDICT" / "boltz_output"),
-#     ],
-#     clean_output=True,
-#     timeout=900,
-# )
+        run_pipeline(
+            "Predict Boltz (lysozyme)",
+            [
+                "predict-boltz",
+                str(TEST / "PREDICT" / "lysozyme.fasta"),
+                "-o",
+                str(TEST / "outputs" / "PREDICT_BOLTZ"),
+            ],
+            clean_output=True,
+            timeout=900,
+        )
 
         run_pipeline(
             "QM ORCA (JZ4)",

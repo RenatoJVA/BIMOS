@@ -18,6 +18,12 @@ import yaml
 from bimos.config.settings import settings
 from bimos.infrastructure import container
 from bimos.molecular_dynamics.config import MDConfig
+from bimos.shared.ligand_identity import (
+    detect_gro_resname,
+    gro_atom_lines,
+    normalize_gro_resname,
+    resolve_ligand_identity,
+)
 from bimos.shared.paths import INFRA_CONFIG_DIR
 from bimos.shared.pipeline import Pipeline
 
@@ -220,18 +226,43 @@ class MolecularDynamicsPipeline(Pipeline):
         pdb = Path(pdb_path).resolve()
         is_holo = ligand_gro is not None and ligand_itp is not None
         prefix = "Holo" if is_holo else "Apo"
-        comp = f"{prefix}-{pdb.stem}"
+
+        # Dual ligand identity: candidate (filename stem) names the output,
+        # internal resname/moleculetype (UNK/LIG/...) drives GROMACS ops.
+        candidate = ""
+        internal = ""
+        if is_holo:
+            if ligand_gro is None or ligand_itp is None:
+                raise ValueError("Holo pipeline requires both ligand_gro and ligand_itp")
+            identity = resolve_ligand_identity(Path(ligand_gro), Path(ligand_itp))
+            candidate = identity.candidate
+            internal = identity.itp_moleculetype
+            for warning in identity.warnings:
+                self.log(f"Ligand '{candidate}': {warning}")
+            self.log(
+                f"Ligand '{candidate}' (candidate) -> internal '{internal}' "
+                f"(gro={identity.gro_resname}, itp={identity.itp_moleculetype})"
+            )
+
+        comp = f"{prefix}-{pdb.stem}-{candidate}" if is_holo else f"{prefix}-{pdb.stem}"
 
         # Override output_dir with job-specific one
         cwd = self.output_dir / comp
         cwd.mkdir(parents=True, exist_ok=True)
 
         shutil.copy2(pdb, cwd / f"{pdb.stem}.pdb")
+        lig_gro_name = f"{candidate}.gro" if is_holo else ""
+        lig_itp_name = f"{candidate}.itp" if is_holo else ""
+        lig_posre_name = f"{candidate}-posre.itp" if is_holo else ""
         if is_holo:
             if ligand_gro is None or ligand_itp is None:
                 raise ValueError("Holo pipeline requires both ligand_gro and ligand_itp")
-            shutil.copy2(ligand_gro, cwd / "ligand.gro")
-            shutil.copy2(ligand_itp, cwd / "ligand.itp")
+            if identity.needs_gro_normalization:
+                n = normalize_gro_resname(Path(ligand_gro), cwd / lig_gro_name, internal)
+                self.log(f"Normalized {n} .gro lines to internal resname '{internal}'")
+            else:
+                shutil.copy2(ligand_gro, cwd / lig_gro_name)
+            shutil.copy2(ligand_itp, cwd / lig_itp_name)
 
         mdps = self._default_mdps(is_holo)
         for name, content in mdps.items():
@@ -246,17 +277,17 @@ class MolecularDynamicsPipeline(Pipeline):
             self.log("Phase: PREP")
             self._clean_pdb(cwd / f"{pdb.stem}.pdb", cwd / f"{pdb.stem}-clean.pdb")
             if is_holo:
-                resname = self._detect_resname(cwd / "ligand.gro")
-                self._patch_itp(cwd / "ligand.itp")
+                resname = internal
+                self._patch_itp(cwd / lig_itp_name)
                 self._gmx(["editconf", "-f", f"{pdb.stem}-clean.pdb", "-o", "prot-box.pdb", "-d", self.md_config.box_distance, "-bt", "cubic", "-noc"], cwd)
                 self._gmx(["editconf", "-f", f"{pdb.stem}-clean.pdb", "-o", "prot-box.gro", "-d", self.md_config.box_distance, "-bt", "cubic", "-noc"], cwd)
                 box = self._get_box(cwd / "prot-box.gro")
                 self._fix_histidines(cwd / "prot-box.pdb", cwd / "prot-his.pdb")
                 self._gmx(["pdb2gmx", "-f", "prot-his.pdb", "-o", "prot-pdb2gmx.gro", "-p", f"{comp}.top", "-ff", self.md_config.forcefield, "-water", self.md_config.water_model, "-ignh"], cwd)
-                self._inject_topology(cwd / f"{comp}.top", cwd / "ligand.itp")
-                self._build_complex(cwd / "prot-pdb2gmx.gro", cwd / "ligand.gro", resname, cwd / f"{comp}-raw.gro")
-                self._gmx(["genrestr", "-f", "ligand.gro", "-o", "ligand-posre.itp", "-fc", "1000", "1000", "1000"], cwd, f"{resname}\n")
-                self._inject_posres(cwd / f"{comp}.top", "ligand")
+                self._inject_topology(cwd / f"{comp}.top", cwd / lig_itp_name)
+                self._build_complex(cwd / "prot-pdb2gmx.gro", cwd / lig_gro_name, resname, cwd / f"{comp}-raw.gro")
+                self._gmx(["genrestr", "-f", lig_gro_name, "-o", lig_posre_name, "-fc", "1000", "1000", "1000"], cwd, f"{resname}\n")
+                self._inject_posres(cwd / f"{comp}.top", candidate)
                 self._gmx(["editconf", "-f", f"{comp}-raw.gro", "-o", f"pre-{comp}-solv.gro", "-bt", "cubic", "-box", *box], cwd)
                 self._gmx(["solvate", "-cp", f"pre-{comp}-solv.gro", "-cs", self.md_config.solvent_gro, "-o", f"min-{comp}-solv.gro", "-p", f"{comp}.top"], cwd)
                 self._gmx(["grompp", "-f", "holo-ions.mdp", "-c", f"min-{comp}-solv.gro", "-p", f"{comp}.top", "-o", f"min-{comp}.tpr", "-maxwarn", "3"], cwd)
@@ -300,11 +331,61 @@ class MolecularDynamicsPipeline(Pipeline):
                     args += ["-n", ndx]
                 self._gmx(args, cwd, inp)
 
-        return {"status": "completed", "output_dir": str(cwd)}
+        result: dict[str, Any] = {"status": "completed", "output_dir": str(cwd), "comp": comp}
+        if is_holo:
+            result["candidate"] = candidate
+            result["ligand_internal"] = internal
+        return result
+
+    def run_batch(
+        self,
+        protein_dir: str | Path,
+        ligand_dir: str | Path,
+        collect_graphs: bool = True,
+    ) -> list[dict[str, Any]]:
+        """Run Holo MD for every protein x ligand pair (like Holo_.py).
+
+        Proteins are ``*.pdb`` in *protein_dir*; ligands are ``*.gro`` + ``*.itp``
+        pairs matched by stem in *ligand_dir*. Each pair runs :meth:`run` and
+        lands in ``{output_dir}/Holo-{PROT}-{LIG}/``. With *collect_graphs*,
+        every ``*.xvg`` is also copied to ``{output_dir}/Analysis_graphs-Holo/``.
+        """
+        from itertools import product
+
+        prot_dir = Path(protein_dir)
+        lig_dir = Path(ligand_dir)
+        pdb_files = sorted(prot_dir.glob("*.pdb"))
+        if not pdb_files:
+            raise ValueError(f"No .pdb files found in {prot_dir}")
+        lig_gros = {p.stem: p for p in lig_dir.glob("*.gro")}
+        lig_itps = {p.stem: p for p in lig_dir.glob("*.itp")}
+        ligands = sorted(set(lig_gros) & set(lig_itps))
+        if not ligands:
+            raise ValueError(f"No matching .gro+.itp pairs found in {lig_dir}")
+        self.log(f"Proteins: {[p.stem for p in pdb_files]}")
+        self.log(f"Ligands: {ligands}")
+
+        results: list[dict[str, Any]] = []
+        for pdb_path, lig_name in product(pdb_files, ligands):
+            self.log(f"Processing: {lig_name}-{pdb_path.stem}")
+            results.append(
+                self.run(
+                    pdb_path=str(pdb_path),
+                    ligand_gro=str(lig_gros[lig_name]),
+                    ligand_itp=str(lig_itps[lig_name]),
+                )
+            )
+
+        if collect_graphs:
+            graphs_dir = self.output_dir / "Analysis_graphs-Holo"
+            graphs_dir.mkdir(parents=True, exist_ok=True)
+            for res in results:
+                for xvg in Path(res["output_dir"]).glob("*.xvg"):
+                    shutil.copy2(xvg, graphs_dir / xvg.name)
+        return results
 
     def _detect_resname(self, gro: Path) -> str:
-        lines = gro.read_text().splitlines()
-        return lines[2][5:8].strip()
+        return detect_gro_resname(gro)
 
     def _patch_itp(self, itp: Path) -> None:
         lines = itp.read_text(errors="replace").splitlines(keepends=True)
@@ -342,7 +423,7 @@ class MolecularDynamicsPipeline(Pipeline):
 
     def _build_complex(self, prot: Path, lig: Path, res: str, out: Path) -> None:
         p_lines = prot.read_text().splitlines(keepends=True)
-        l_lines = [ln for ln in lig.read_text().splitlines(keepends=True) if res in ln]
+        l_lines = gro_atom_lines(lig, res)
         n = len(p_lines) - 3 + len(l_lines)
         new = [p_lines[0], f" {n}\n", *p_lines[2:-1], *l_lines, p_lines[-1]]
         out.write_text("".join(new))
@@ -378,12 +459,19 @@ class MolecularDynamicsPipeline(Pipeline):
         return result
 
 
-def run_md_simulation(**kwargs: Any) -> dict[str, Any]:
+def run_md_simulation(**kwargs: Any) -> dict[str, Any] | list[dict[str, Any]]:
     output_dir = kwargs.pop("output_dir", None)
     on_output = kwargs.pop("on_output", None)
     max_mode = kwargs.pop("max_resources", False)
-    return MolecularDynamicsPipeline(
+    pipeline = MolecularDynamicsPipeline(
         output_dir=output_dir,
         on_output=on_output,
         max_mode=max_mode,
-    ).run(**kwargs)
+    )
+    if "protein_dir" in kwargs or "ligand_dir" in kwargs:
+        protein_dir = kwargs.pop("protein_dir", None)
+        ligand_dir = kwargs.pop("ligand_dir", None)
+        if not protein_dir or not ligand_dir:
+            raise ValueError("Batch mode requires both protein_dir and ligand_dir")
+        return pipeline.run_batch(protein_dir=protein_dir, ligand_dir=ligand_dir)
+    return pipeline.run(**kwargs)

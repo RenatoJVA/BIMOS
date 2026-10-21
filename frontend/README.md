@@ -10,10 +10,10 @@ BIMOS is primarily a **CLI-first** engine. This frontend provides a premium grap
 
 ## Tech Stack
 
-- **React 18** + **TypeScript**
+- **React 19** + **TypeScript**
 - **Vite** for build tooling
-- **Vanilla CSS** — glassmorphic dark/light theme
-- **Fetch API** → FastAPI backend at `http://127.0.0.1:8000`
+- **Tailwind CSS 4** + **TanStack Query 5** — dark/light theme, live job data
+- **Fetch API** → FastAPI backend at `http://localhost:8000`
 
 ## Development
 

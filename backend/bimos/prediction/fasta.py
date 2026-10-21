@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+CHAIN_IDS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
 
 def read_sequences(fasta_path: Path) -> list[str]:
     """Return protein sequence strings from a FASTA file."""
@@ -55,7 +57,6 @@ def ensure_yaml(path: Path, output_dir: Path) -> Path:
 
 def write_boltz_yaml(fasta_path: Path, yaml_path: Path) -> list[str]:
     """Write a Boltz-compatible YAML file from FASTA input."""
-    headers: list[str] = []
     sequences: list[str] = []
     with open(fasta_path, encoding="utf-8") as handle:
         current_seq: list[str] = []
@@ -67,7 +68,6 @@ def write_boltz_yaml(fasta_path: Path, yaml_path: Path) -> list[str]:
                 if current_seq:
                     sequences.append("".join(current_seq))
                     current_seq = []
-                headers.append(line[1:].split()[0])
             else:
                 current_seq.append(line)
         if current_seq:
@@ -78,8 +78,7 @@ def write_boltz_yaml(fasta_path: Path, yaml_path: Path) -> list[str]:
     lines = ["sequences:"]
     for i, sequence in enumerate(sequences):
         lines.append("  - protein:")
-        if i < len(headers):
-            lines.append(f"      id: {headers[i]}")
+        lines.append(f"      id: {CHAIN_IDS[i]}")
         lines.append(f"      sequence: {sequence}")
     yaml_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return sequences
