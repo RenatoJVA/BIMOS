@@ -31,8 +31,8 @@
 #        --after-install installer/postinst.sh \
 #        --after-remove  installer/postrm.sh \
 #        --deb-desktop-entries installer/assets/bimos.desktop \
-#        backend/dist/bimos=/usr/bin/bimos \
-#        backend/dockers=/opt/bimos/dockers \
+#        backend/dist/main.dist=/opt/bimos/lib \
+#        (dockers ship inside main.dist/dockers; there is no second copy) \
 #        backend/README.md=/usr/share/doc/bimos/README.md \
 #        LICENSE=/usr/share/doc/bimos/LICENSE \
 #        NOTICE.md=/usr/share/doc/bimos/NOTICE.md \
@@ -59,11 +59,9 @@ recommends:
   - docker-compose-plugin >= 2.0
 
 files:
-  - src: backend/dist/bimos
-    dst: /usr/bin/bimos
+  - src: backend/dist/main.dist
+    dst: /opt/bimos/lib
     mode: "0755"
-  - src: backend/dockers
-    dst: /opt/bimos/dockers
   - src: backend/README.md
     dst: /usr/share/doc/bimos/README.md
   - src: LICENSE

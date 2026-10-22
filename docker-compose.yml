@@ -5,19 +5,23 @@ services:
       dockerfile: Dockerfile
     image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-bimos}/bimos:${BIMOS_VERSION:-latest}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       BIMOS_WORKSPACE: /workspace
       BIMOS_CACHE: /cache
       BIMOS_LOGS: /logs
-      BIMOS_DATABASE_URL: postgresql://bimos:bimos@bimos-db:5432/bimos
+      BIMOS_DATABASE_URL: postgresql+psycopg://bimos:${BIMOS_DB_PASSWORD:?BIMOS_DB_PASSWORD is required}@bimos-db:5432/bimos
       BIMOS_BASE_PATH: /data
+      # This stack is API/UI + PostgreSQL only. Scientific jobs run on the
+      # compute host, where Docker/Podman and the GPU/CDI devices live. Do not
+      # mount the container runtime socket here: it grants host-root.
+      BIMOS_EXECUTION_MODE: disabled
+      BIMOS_API_TOKEN: ${BIMOS_API_TOKEN:?BIMOS_API_TOKEN is required}
     volumes:
       - bimos-workspace:/workspace
       - bimos-cache:/cache
       - bimos-logs:/logs
       - bimos-data:/data
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     command: ["-g", "--headless", "--host", "0.0.0.0", "--port", "8000"]
     depends_on:
       bimos-db:
@@ -34,12 +38,12 @@ services:
     image: docker.io/postgres:16-alpine
     environment:
       POSTGRES_USER: bimos
-      POSTGRES_PASSWORD: bimos
+      POSTGRES_PASSWORD: ${BIMOS_DB_PASSWORD:?BIMOS_DB_PASSWORD is required}
       POSTGRES_DB: bimos
     volumes:
       - bimos-pgdata:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U bimos"]

@@ -23,7 +23,10 @@ FROM docker.io/python:3.12-slim AS builder
 
 WORKDIR /build
 
+# The wheel is built from the source tree, so the package itself must be in the
+# build context. Building from pyproject.toml alone produces an empty wheel.
 COPY pyproject.toml README.md ./
+COPY bimos ./bimos
 
 RUN pip install --no-cache-dir build wheel \
     && pip download --no-cache-dir --dest /deps ".[db,monitoring]" \

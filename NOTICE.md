@@ -19,6 +19,7 @@ licensing of BIMOS compatible with the licenses below.
 
 | Component | License | Shipped? |
 |-----------|---------|----------|
+| PyQt6 / Qt6 | GPLv3 | Yes, GUI runtime |
 | GROMACS 2025.4 | GPL-2.0-or-later | Yes, in the container image |
 | AutoDock Vina 1.2.5 | Apache-2.0 | Yes, in the container image |
 | Boltz (code + weights) | MIT | Yes, installed in the image (weights cached at runtime) |
@@ -32,6 +33,41 @@ licensing of BIMOS compatible with the licenses below.
 | OpenBabel (`obabel`) | GPL-2.0 | **No** — host prerequisite for QM, install separately |
 | ORCA | Commercial / academic | **No** — never distributed; user-licensed (see below) |
 | Gaussian 16 | Commercial | **No** — never distributed; user-licensed (see below) |
+
+### Python, GUI and build dependencies
+
+| Component | License |
+|-----------|---------|
+| Python | PSF-2.0 |
+| Click | BSD-3-Clause |
+| FastAPI | MIT |
+| Uvicorn | BSD-3-Clause |
+| python-multipart | Apache-2.0 |
+| Pydantic | MIT |
+| python-dotenv | BSD-3-Clause |
+| PyYAML | MIT |
+| rich-click | MIT |
+| SQLAlchemy | MIT |
+| psycopg | LGPL-3.0 |
+| pywebview | BSD-3-Clause |
+| QtPy | MIT |
+| psutil | BSD-3-Clause |
+| zstandard | BSD-3-Clause |
+| Nuitka | Apache-2.0 |
+| pytest | MIT |
+| ruff | MIT |
+| mypy | MIT |
+| httpx | BSD-3-Clause |
+| NumPy | BSD-3-Clause |
+| SciPy | BSD-3-Clause |
+| pandas | BSD-3-Clause |
+| scikit-learn | BSD-3-Clause |
+| Matplotlib | PSF-based |
+| Pillow | HPND |
+
+All distributed Python and GUI dependencies are open source or permissive and
+compatible with GPLv3. The NVIDIA CUDA base image remains under its EULA and is
+not relicensed.
 
 ---
 

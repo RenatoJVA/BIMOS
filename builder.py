@@ -207,7 +207,10 @@ def verify_deb(root: Path, version: str):
         staging / "usr/bin/bimos",
         staging / "usr/share/applications/bimos.desktop",
         staging / "usr/share/doc/bimos/README.md",
-        staging / "opt/bimos/dockers/Dockerfile.bimos",
+        # Dockers ship inside the Nuitka standalone tree (dist/dockers),
+        # which fpm maps to /opt/bimos/lib. setup.py resolves them relative
+        # to the package, so no second copy is packaged.
+        staging / "opt/bimos/lib/dockers/Dockerfile.bimos",
     ]
     missing = [p.relative_to(staging) for p in expected_payload if not p.exists()]
     # Legal docs are best-effort: flagged at packaging time, not structural failures
@@ -319,14 +322,6 @@ def package_linux_deb(root: Path, version: str):
         else:
             warn(f"{doc} not found — package will omit it")
 
-    # Dockers: map contents directly (avoid double nesting)
-    dockers_src = root / "backend" / "dockers"
-    for f in dockers_src.iterdir():
-        if f.is_file():
-            file_mappings.append((str(f), f"/opt/bimos/dockers/{f.name}"))
-        elif f.is_dir():
-            file_mappings.append((f"{f}/", f"/opt/bimos/dockers/{f.name}"))
-
     icon = root / "installer" / "assets" / "bimos.png"
     if icon.exists():
         file_mappings.append((str(icon), "/usr/share/pixmaps/bimos.png"))
@@ -412,12 +407,6 @@ def package_windows_nsis(root: Path, version: str):
         error(f"Binary directory not found: {binary_dir}")
         sys.exit(1)
 
-    # Verify dockers dir exists
-    dockers_dir = root / "backend" / "dockers"
-    if not dockers_dir.exists():
-        warn(f"Dockers directory not found: {dockers_dir}")
-        dockers_dir.mkdir(parents=True, exist_ok=True)
-
     nsi_script = root / "installer" / "bimos.nsi"
 
     # Patch NSI with absolute paths
@@ -430,7 +419,6 @@ def package_windows_nsis(root: Path, version: str):
     # Replace file/directory paths with absolute paths
     binary_path = str(binary_dir).replace("\\", "\\\\")
     readme_path = str(readme_file).replace("\\", "\\\\")
-    dockers_path = str(dockers_dir).replace("\\", "\\\\")
     license_path = str(license_file).replace("\\", "\\\\")
     legal_docs_path = str(legal_dir).replace("\\", "\\\\")
     
@@ -438,7 +426,6 @@ def package_windows_nsis(root: Path, version: str):
     nsi_patched = nsi_patched.replace("LEGAL_DOCS_DIR_PATH", legal_docs_path)
     nsi_patched = nsi_patched.replace("BINARY_DIR_PATH", binary_path)
     nsi_patched = nsi_patched.replace("README_FILE_PATH", readme_path)
-    nsi_patched = nsi_patched.replace("DOCKERS_DIR_PATH", dockers_path)
 
     # Inject MUI asset definitions if files exist
     mui_defs = []
