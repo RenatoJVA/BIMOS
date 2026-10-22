@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from bimos.api.schemas import JobResponse
 from bimos.api.utils import get_job_or_404, job_to_response
-from bimos.infrastructure.job_store import store
+from bimos.infrastructure.job_store import JobStatus, store
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
@@ -31,9 +31,13 @@ async def get_job_logs(job_id: str, tail: int | None = Query(None)):  # type: ig
 
 @router.post("/{job_id}/cancel")
 async def cancel_job(job_id: str):  # type: ignore[no-untyped-def]
-    """Cancel a running job."""
+    """Cancel a pending/running job. Terminal jobs are never overwritten."""
+    get_job_or_404(job_id)
     if not store.cancel(job_id):
-        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
+        raise HTTPException(
+            status_code=409,
+            detail=f"Job '{job_id}' is already finished and cannot be canceled.",
+        )
     return {"status": "canceled", "job_id": job_id}
 
 @router.delete("/{job_id}", status_code=204)
@@ -43,25 +47,38 @@ async def delete_job(job_id: str):  # type: ignore[no-untyped-def]
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
 
 @router.get("/{job_id}/logs/stream")
-async def stream_job_logs(job_id: str):  # type: ignore[no-untyped-def]
-    """SSE endpoint that streams new log lines as they are written."""
+async def stream_job_logs(
+    job_id: str,
+    offset: int | None = Query(None, ge=0),
+):  # type: ignore[no-untyped-def]
+    """SSE endpoint that streams log lines from *offset* and closes on finish."""
     import asyncio
 
     get_job_or_404(job_id)
-    last_len = 0
+    position = offset or 0
 
     async def _event_stream():
-        nonlocal last_len
+        nonlocal position
         while True:
-            logs = store.get_logs(job_id)
-            new_lines = logs[last_len:]
-            for line in new_lines:
-                yield f"data: {json.dumps({'line': line})}\n\n"
-            last_len = len(logs)
-            try:
-                await asyncio.sleep(1)
-            except asyncio.CancelledError:
+            chunk, position = store.read_log_chunk(job_id, position)
+            for line in chunk.splitlines():
+                if line:
+                    yield f"data: {json.dumps({'line': line})}\n\n"
+
+            job = store.get(job_id)
+            if job is None or job.status in {
+                JobStatus.COMPLETED,
+                JobStatus.FAILED,
+                JobStatus.CANCELED,
+            }:
+                status = job.status.value if job is not None else "deleted"
+                yield f"data: {json.dumps({'status': status})}\n\n"
                 break
+
+            try:
+                await asyncio.sleep(0.5)
+            except asyncio.CancelledError:
+                return
 
     return StreamingResponse(
         _event_stream(),

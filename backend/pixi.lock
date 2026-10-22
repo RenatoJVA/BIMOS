@@ -5322,7 +5322,7 @@ packages:
   - pyyaml>=6.0.3
   - rich-click>=1.9.7
   - sqlalchemy>=2.0.30 ; extra == 'db'
-  - psycopg2-binary>=2.9.9 ; extra == 'db'
+  - psycopg[binary]>=3.2 ; extra == 'db'
   - pywebview>=6.2.1 ; extra == 'gui'
   - pythonnet>=3.0.5 ; sys_platform == 'win32' and extra == 'gui'
   - pyqt6>=6.11.0 ; sys_platform != 'win32' and extra == 'gui'

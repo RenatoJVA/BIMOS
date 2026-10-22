@@ -78,10 +78,14 @@ def gaussian_memory_gb(mem: object) -> float | None:
 
 def _qm_memory_gb(config_name: str) -> float | None:
     """RAM requested per QM job, in GB, from the active ORCA/Gaussian config."""
+    from bimos.config.settings import settings
     from bimos.shared.user_config import resolve
 
     try:
-        data, _ = resolve(config_name)
+        if settings.max_threads:
+            data, _ = resolve(config_name, max_mode=True)
+        else:
+            data, _ = resolve(config_name)
     except (OSError, ValueError, KeyError):
         return None
     if config_name == "orca":
@@ -93,9 +97,20 @@ def _qm_memory_gb(config_name: str) -> float | None:
     return gaussian_memory_gb(data.get("gaussian", {}).get("mem"))
 
 
+def _effective_qm_jobs(config_name: str, jobs: int | None) -> int:
+    """CLI --jobs wins; otherwise use the active YAML/MAX profile."""
+    if jobs is not None:
+        return jobs
+    from bimos.config.settings import settings
+    from bimos.quantum_chemistry.config import GaussianConfig, OrcaConfig
+
+    config_cls = OrcaConfig if config_name == "orca" else GaussianConfig
+    return config_cls.resolve(max_mode=settings.max_threads).max_jobs
+
+
 def _run_qm(
     directory: str,
-    jobs: int,
+    jobs: int | None,
     charge: int,
     background: bool,
     gui: bool,
@@ -107,9 +122,10 @@ def _run_qm(
 ) -> None:
     from bimos.shared import hardware
 
+    effective_jobs = _effective_qm_jobs(config_name, jobs)
     hardware.guard(
         kind,
-        hardware.assess_qm(_qm_memory_gb(config_name), jobs),
+        hardware.assess_qm(_qm_memory_gb(config_name), effective_jobs),
         force=force,
     )
 
@@ -134,13 +150,13 @@ def _run_qm(
 
 @click.command("qm-orca", epilog=QM_EPILOG)
 @click.argument("directory", type=click.Path(exists=True, file_okay=False))
-@click.option("--jobs", "-j", default=2, help="Max parallel QM calculations.")
+@click.option("--jobs", "-j", type=click.IntRange(min=1), default=None, help="Max parallel QM calculations (defaults to the YAML/MAX profile).")
 @click.option("--charge", "-q", default=0, help="Integer net charge of the ligands.")
 @click.option("--background", "-b", is_flag=True, help="Run in background.")
 @click.option("--gui", "-g", is_flag=True, help="Open GUI dashboard.")
 @force_option
 def qm_orca(
-    directory: str, jobs: int, charge: int, background: bool, gui: bool, force: bool
+    directory: str, jobs: int | None, charge: int, background: bool, gui: bool, force: bool
 ) -> None:
     """Run full ORCA Hirshfeld pipeline on a directory of matching .gro + .itp pairs."""
     from bimos.quantum_chemistry import run_orca_pipeline
@@ -154,13 +170,13 @@ def qm_orca(
 
 @click.command("qm-g16", epilog=QM_EPILOG)
 @click.argument("directory", type=click.Path(exists=True, file_okay=False))
-@click.option("--jobs", "-j", default=2, help="Max parallel QM calculations.")
+@click.option("--jobs", "-j", type=click.IntRange(min=1), default=None, help="Max parallel QM calculations (defaults to the YAML/MAX profile).")
 @click.option("--charge", "-q", default=0, help="Integer net charge of the ligands.")
 @click.option("--background", "-b", is_flag=True, help="Run in background.")
 @click.option("--gui", "-g", is_flag=True, help="Open GUI dashboard.")
 @force_option
 def qm_g16(
-    directory: str, jobs: int, charge: int, background: bool, gui: bool, force: bool
+    directory: str, jobs: int | None, charge: int, background: bool, gui: bool, force: bool
 ) -> None:
     """Run full Gaussian Hirshfeld pipeline on a directory of matching .gro + .itp pairs."""
     from bimos.quantum_chemistry import run_gaussian_pipeline

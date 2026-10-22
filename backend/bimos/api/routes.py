@@ -3,16 +3,21 @@ BIMOS FastAPI router configuration.
 Modularized by domain to improve maintainability.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from bimos.api.endpoints import config, dock, jobs, predict, simulate, system
+from bimos.api.security import require_api_token
 
 router = APIRouter(prefix="/api/v1")
 
-# Include sub-routers
+# Health stays public (container probes); every data/job endpoint is protected
+# when BIMOS_API_TOKEN is configured.
 router.include_router(system.router)
-router.include_router(config.router)
-router.include_router(jobs.router)
-router.include_router(predict.router)
-router.include_router(dock.router)
-router.include_router(simulate.router)
+
+protected = APIRouter(dependencies=[Depends(require_api_token)])
+protected.include_router(config.router)
+protected.include_router(jobs.router)
+protected.include_router(predict.router)
+protected.include_router(dock.router)
+protected.include_router(simulate.router)
+router.include_router(protected)

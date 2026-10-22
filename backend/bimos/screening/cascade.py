@@ -42,10 +42,10 @@ class ScreenCascade(Pipeline):
         on_output: Callable[[str], None] | None = None,
         qm_backend: str = "orca",
         charge: int = 0,
-        max_jobs: int = 2,
+        max_jobs: int | None = None,
         min_score: float | None = None,
         top_n: int = 5,
-        max_resources: bool = False,
+        max_resources: bool | None = None,
         **dock_kwargs: Any,
     ) -> None:
         super().__init__(output_dir, on_output)
@@ -107,6 +107,8 @@ class ScreenCascade(Pipeline):
             self._save_state(stage, artifacts)
         elif stage == "apo":
             self.log("APO skipped (--protein-eq provided)")
+            stage = "dock"
+            self._save_state(stage, artifacts)
 
         if stage == "dock":
             artifacts["dock_dir"], artifacts["ranking"] = self._stage_dock(receptor, ligands_sdf, dataset)

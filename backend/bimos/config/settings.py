@@ -4,6 +4,7 @@ import os
 import shutil
 import sys
 from importlib import resources
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -55,11 +56,16 @@ def _bootstrap_user_configs() -> None:
             target.write_text(resource.read_text(encoding="utf-8"), encoding="utf-8")
 
 
-def _bootstrap_first_run() -> None:
-    """Create .env and config files on first run. Then reload."""
+def _bootstrap_first_run(*, announce: bool = True) -> None:
+    """Create .env and config files on first run.
+
+    This is called only from :func:`initialize`, never at import time.
+    """
     BIMOS_BASE.mkdir(parents=True, exist_ok=True)
     BIMOS_ENV_FILE.write_text(_render_env_template(), encoding="utf-8")
     _bootstrap_user_configs()
+    if not announce:
+        return
     print(
         "============================================================", file=sys.stderr
     )
@@ -78,58 +84,67 @@ def _bootstrap_first_run() -> None:
     )
 
 
-_initialized = False
-
-
-def _ensure_initialized() -> None:
-    global _initialized
-    if _initialized:
-        return
-    if not BIMOS_ENV_FILE.exists():
-        _bootstrap_first_run()
-    load_dotenv(BIMOS_ENV_FILE)
-    _initialized = True
-
-
-_ensure_initialized()
+def _package_version() -> str:
+    """Version declared once in ``pyproject.toml`` and installed as metadata."""
+    try:
+        return version("bimos")
+    except PackageNotFoundError:
+        return "0.0.0+unknown"
 
 
 class Settings:
-    # Application
-    app_name: str = "BIMOS"
-    app_version: str = "0.1.0"
-    debug: bool = os.getenv("BIMOS_DEBUG", "false").lower() == "true"
+    def __init__(self) -> None:
+        self.reload()
 
-    # Server
-    host: str = os.getenv("BIMOS_HOST", "127.0.0.1")
-    port: int = int(os.getenv("BIMOS_PORT", "8000"))
+    def reload(self) -> None:
+        """Read environment variables into this instance.
 
-    # Paths
-    base_path: Path = BIMOS_BASE
-    workspace_path: Path = (
-        Path(os.getenv("BIMOS_WORKSPACE", str(BIMOS_BASE / "workspace")))
-        .expanduser()
-        .resolve()
-    )
-    cache_path: Path = (
-        Path(os.getenv("BIMOS_CACHE", str(BIMOS_BASE / "cache"))).expanduser().resolve()
-    )
-    logs_path: Path = (
-        Path(os.getenv("BIMOS_LOGS", str(BIMOS_BASE / "logs"))).expanduser().resolve()
-    )
+        Importing this module is side-effect free: the process environment is
+        snapshotted here, but the user ``.env`` is loaded only by
+        :func:`initialize` (CLI/API startup).
+        """
+        # Application
+        self.app_name = "BIMOS"
+        self.app_version = _package_version()
+        self.debug = os.getenv("BIMOS_DEBUG", "false").lower() == "true"
 
-    # Container image
-    bimos_image: str = os.getenv("BIMOS_IMAGE", "localhost/bimos/global:latest")
-    use_gpu: bool = os.getenv("BIMOS_USE_GPU", "true").lower() == "true"
-    max_threads: bool = False
+        # Server
+        self.host = os.getenv("BIMOS_HOST", "127.0.0.1")
+        self.port = int(os.getenv("BIMOS_PORT", "8000"))
+        # ``local`` runs jobs on this host; ``disabled`` serves the UI/API without
+        # executing pipelines (the supported mode for the reference compose stack).
+        self.execution_mode = os.getenv("BIMOS_EXECUTION_MODE", "local").strip().lower()
+        # Required whenever the API is bound outside loopback. Empty means the
+        # default local-only deployment, which does not need a token.
+        self.api_token = os.getenv("BIMOS_API_TOKEN", "")
 
-    # Remote Connection
-    remote_url: str = os.getenv(
-        "BIMOS_REMOTE_URL", ""
-    )  # e.g., http://192.168.1.100:8000
-    ssh_host: str = os.getenv("BIMOS_SSH_HOST", "")
-    ssh_user: str = os.getenv("BIMOS_SSH_USER", "")
-    ssh_key: str = os.getenv("BIMOS_SSH_KEY", "")
+        # Paths
+        self.base_path = BIMOS_BASE
+        self.workspace_path = (
+            Path(os.getenv("BIMOS_WORKSPACE", str(BIMOS_BASE / "workspace")))
+            .expanduser()
+            .resolve()
+        )
+        self.cache_path = (
+            Path(os.getenv("BIMOS_CACHE", str(BIMOS_BASE / "cache"))).expanduser().resolve()
+        )
+        self.logs_path = (
+            Path(os.getenv("BIMOS_LOGS", str(BIMOS_BASE / "logs"))).expanduser().resolve()
+        )
+
+        # Container image
+        self.bimos_image = os.getenv("BIMOS_IMAGE", "localhost/bimos/global:latest")
+        self.use_gpu = os.getenv("BIMOS_USE_GPU", "true").lower() == "true"
+        self.max_threads = False
+
+        # Remote Connection
+        self.remote_url = os.getenv("BIMOS_REMOTE_URL", "")  # e.g., http://192.168.1.100:8000
+        self.ssh_host = os.getenv("BIMOS_SSH_HOST", "")
+        self.ssh_user = os.getenv("BIMOS_SSH_USER", "")
+        self.ssh_key = os.getenv("BIMOS_SSH_KEY", "")
+
+        # Database
+        self.database_url = os.getenv("BIMOS_DATABASE_URL", "")
 
     @staticmethod
     def _physical_core_count() -> int:
@@ -164,11 +179,6 @@ class Settings:
             "No container runtime found. Install Podman or Docker and ensure it is in PATH."
         )
 
-    # Database
-    database_url: str = os.getenv(
-        "BIMOS_DATABASE_URL", ""
-    )
-
     # ORCA and Gaussian: defined by host binary path (not containerized)
     @property
     def orca_path(self) -> str:
@@ -200,3 +210,18 @@ class Settings:
 
 
 settings = Settings()
+
+
+def initialize(*, announce: bool = True) -> bool:
+    """Load ``~/.bimos/.env``, creating the user config on first run.
+
+    Returns ``True`` when the first-run bootstrap created files. Safe to call
+    more than once; importers only get a snapshot of the process environment.
+    """
+    created = False
+    if not BIMOS_ENV_FILE.exists():
+        _bootstrap_first_run(announce=announce)
+        created = True
+    load_dotenv(BIMOS_ENV_FILE, override=False)
+    settings.reload()
+    return created

@@ -42,7 +42,7 @@ class QMPipeline(Pipeline):
         output_dir: str | Path | None = None,
         on_output: Callable[[str], None] | None = None,
         charge: int = 0,
-        max_jobs: int = 2,
+        max_jobs: int | None = None,
         max_mode: bool | None = None,
     ) -> None:
         super().__init__(output_dir, on_output)
@@ -92,7 +92,7 @@ class OrcaPipeline(QMPipeline):
         if not orca_bin or not Path(orca_bin).exists():
             raise FileNotFoundError("ORCA binary not found. Configure ORCA_PATH in .env")
 
-        cfg = OrcaConfig.resolve(max_mode=self.max_mode, charge=self.charge)
+        cfg = OrcaConfig.resolve(max_mode=self.max_mode, charge=self.charge, max_jobs=self.max_jobs)
         self.log(f"ORCA profile: {cfg.profile}")
         gro_files = sorted(dir_path.glob("*.gro"))
         self.log(f"Found {len(gro_files)} .gro files in {dir_path}")
@@ -211,6 +211,32 @@ class OrcaPipeline(QMPipeline):
         return {"status": "completed", "results": results}
 
 
+_GAUSSIAN_HIRSHFELD_RE = re.compile(r"^\s*(\d+)\s+([A-Z][a-zA-Z]?)\s+([-]?\d+\.\d+)")
+
+
+def parse_gaussian_hirshfeld_charges(log_path: Path) -> list[float]:
+    """Extract the per-atom Hirshfeld charges from a Gaussian log.
+
+    Gaussian prints a second, smaller table with hydrogens summed into heavy
+    atoms. Only the first table must be read; stopping at its ``Tot`` row keeps
+    the totals block out of the returned charge list.
+    """
+    charges: list[float] = []
+    inside = False
+    for line in log_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if "Hirshfeld charges, spin densities" in line:
+            inside = True
+            continue
+        if not inside:
+            continue
+        if line.split()[:1] == ["Tot"]:
+            break
+        match = _GAUSSIAN_HIRSHFELD_RE.match(line)
+        if match:
+            charges.append(float(match.group(3)))
+    return charges
+
+
 class GaussianPipeline(QMPipeline):
     """Gaussian Hirshfeld charge pipeline."""
 
@@ -220,7 +246,7 @@ class GaussianPipeline(QMPipeline):
         if not g16_bin or not Path(g16_bin).exists():
             raise FileNotFoundError("Gaussian binary not found. Configure GAUSSIAN_PATH in .env")
 
-        cfg = GaussianConfig.resolve(max_mode=self.max_mode, charge=self.charge)
+        cfg = GaussianConfig.resolve(max_mode=self.max_mode, charge=self.charge, max_jobs=self.max_jobs)
         self.log(f"Gaussian profile: {cfg.profile}")
         gro_files = sorted(dir_path.glob("*.gro"))
         self.log(f"Found {len(gro_files)} .gro files in {dir_path}")
@@ -277,7 +303,6 @@ class GaussianPipeline(QMPipeline):
                     continue
 
         results: list[str] = []
-        pattern = re.compile(r"^\s*(\d+)\s+([A-Z][a-zA-Z]?)\s+([-]?\d+\.\d+)")
         for gro in gro_files:
             itp = gro.with_suffix(".itp")
             log_path = gro.with_suffix(".log")
@@ -303,22 +328,7 @@ class GaussianPipeline(QMPipeline):
                 self.log(f"Skipping {gro.name}: unreadable identity ({exc})", logging.WARNING)
                 continue
 
-            charges: list[float] = []
-            inside = False
-            with open(log_path, encoding="utf-8") as handle:
-                for line in handle:
-                    if "Hirshfeld charges, spin densities" in line:
-                        inside = True
-                        continue
-                    if not inside:
-                        continue
-                    parts = line.split()
-                    if parts[1:2] == ["Tot"]:
-                        break
-                    match = pattern.match(line)
-                    if match:
-                        charges.append(float(match.group(3)))
-
+            charges = parse_gaussian_hirshfeld_charges(log_path)
             if charges:
                 if len(charges) != n_itp:
                     self.log(
@@ -334,10 +344,10 @@ class GaussianPipeline(QMPipeline):
 
 
 def run_orca_pipeline(directory: str, **kwargs: Any) -> dict[str, Any]:
-    max_mode = kwargs.pop("max_resources", False)
+    max_mode = kwargs.pop("max_resources", None)
     return OrcaPipeline(max_mode=max_mode, **kwargs).run(directory)
 
 
 def run_gaussian_pipeline(directory: str, **kwargs: Any) -> dict[str, Any]:
-    max_mode = kwargs.pop("max_resources", False)
+    max_mode = kwargs.pop("max_resources", None)
     return GaussianPipeline(max_mode=max_mode, **kwargs).run(directory)

@@ -5,16 +5,19 @@ API utilities for job dispatching and response formatting.
 import os
 import re
 import threading
+import uuid
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 
 from bimos.api.schemas import JobResponse
 from bimos.infrastructure import cancellation
 from bimos.infrastructure.job_store import JobRecord, JobStatus, current_job_id, store
 
 SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9_.-]+$")
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
 
 def safe_filename(filename: str | None) -> str:
@@ -26,6 +29,40 @@ def safe_filename(filename: str | None) -> str:
     if not SAFE_NAME_RE.match(basename):
         raise HTTPException(status_code=422, detail=f"Invalid filename: {filename}")
     return basename
+
+
+def new_job_dir(category: str, name: str) -> Path:
+    """Create a unique output directory so concurrent jobs never overwrite files."""
+    from bimos.config.settings import settings
+
+    safe = safe_filename(name)
+    stem = Path(safe).stem or "job"
+    base = settings.workspace_path / category
+    base.mkdir(parents=True, exist_ok=True)
+    for _ in range(10):
+        candidate = base / f"{stem}-{uuid.uuid4().hex[:10]}"
+        try:
+            candidate.mkdir()
+            return candidate
+        except FileExistsError:
+            continue
+    raise HTTPException(status_code=500, detail="Could not allocate a unique job directory.")
+
+
+async def read_upload(upload: UploadFile, max_bytes: int | None = None) -> bytes:
+    """Read an upload with a hard size cap instead of trusting Content-Length."""
+    limit = MAX_UPLOAD_BYTES if max_bytes is None else max_bytes
+    chunks: list[bytes] = []
+    total = 0
+    while chunk := await upload.read(1024 * 1024):
+        total += len(chunk)
+        if total > limit:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Upload '{upload.filename}' exceeds the {limit // (1024 * 1024)} MB limit.",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def job_to_response(j: JobRecord) -> JobResponse:

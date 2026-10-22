@@ -81,12 +81,9 @@ def _print(msg: str) -> None:
 # ── Root group ────────────────────────────────────────────────────────────────
 
 def _bimos_version() -> str:
-    try:
-        from importlib.metadata import version
+    from bimos.config.settings import settings
 
-        return version("bimos")
-    except Exception:
-        return "0.1.0"
+    return settings.app_version
 
 
 @click.group(invoke_without_command=True)
@@ -130,7 +127,9 @@ def cli(ctx: click.Context, debug: bool, max: bool, gui: bool, manual: bool, hos
 
     import gc
 
-    from bimos.config.settings import settings
+    from bimos.config.settings import initialize, settings
+
+    initialize()
     gc.collect()
 
     if debug:

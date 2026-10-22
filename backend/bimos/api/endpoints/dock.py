@@ -2,17 +2,18 @@
 Molecular docking endpoints.
 """
 
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from bimos.api.schemas import JobResponse
-from bimos.api.utils import dispatch_job, job_to_response, safe_filename
-from bimos.config.settings import settings
+from bimos.api.security import require_execution
+from bimos.api.utils import dispatch_job, job_to_response, new_job_dir, read_upload, safe_filename
 from bimos.docking import run_docking_pipeline
 from bimos.infrastructure.job_store import store
 
-router = APIRouter(tags=["Docking"])
+router = APIRouter(tags=["Docking"], dependencies=[Depends(require_execution)])
 
 
 @router.post("/dock", response_model=JobResponse, status_code=202)
@@ -47,13 +48,12 @@ async def dock_job(  # type: ignore[no-untyped-def]
 
     safe_protein = safe_filename(protein.filename)
     safe_ligands = safe_filename(ligands.filename)
-    job_dir = settings.workspace_path / "docking" / safe_protein.replace(".pdb", "")
-    job_dir.mkdir(parents=True, exist_ok=True)
+    job_dir = new_job_dir("docking", Path(safe_protein).stem)
 
     pdb_path = job_dir / safe_protein
     sdf_path = job_dir / safe_ligands
-    pdb_path.write_bytes(await protein.read())
-    sdf_path.write_bytes(await ligands.read())
+    pdb_path.write_bytes(await read_upload(protein))
+    sdf_path.write_bytes(await read_upload(ligands))
 
     overrides: dict[str, Any] = {}
     for key, value in {
@@ -76,7 +76,7 @@ async def dock_job(  # type: ignore[no-untyped-def]
     if reference is not None and reference.filename:
         # Kept in the job dir as evidence of the site used.
         ref_path = job_dir / f"reference_{safe_filename(reference.filename)}"
-        ref_path.write_bytes(await reference.read())
+        ref_path.write_bytes(await read_upload(reference))
         overrides["center_on"] = str(ref_path)
 
     job = store.create(

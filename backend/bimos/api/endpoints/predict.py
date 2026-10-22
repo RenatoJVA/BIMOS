@@ -4,23 +4,22 @@ Structure prediction endpoints.
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from bimos.api.schemas import JobResponse, PredictBoltzRequest
-from bimos.api.utils import dispatch_job, job_to_response, safe_filename
-from bimos.config.settings import settings
+from bimos.api.security import require_execution
+from bimos.api.utils import dispatch_job, job_to_response, new_job_dir, safe_filename
 from bimos.infrastructure.job_store import store
 from bimos.prediction import predict_boltz
 
-router = APIRouter(tags=["Prediction"])
+router = APIRouter(tags=["Prediction"], dependencies=[Depends(require_execution)])
 
 
 @router.post("/predict", response_model=JobResponse, status_code=202)
 async def predict_job(req: PredictBoltzRequest):  # type: ignore[no-untyped-def]
     """Submit a structure prediction job using Boltz-2."""
     safe_name = safe_filename(req.name)
-    job_dir = settings.workspace_path / "predict" / safe_name
-    job_dir.mkdir(parents=True, exist_ok=True)
+    job_dir = new_job_dir("predict", safe_name)
     fasta_path = job_dir / f"{safe_name}.fasta"
     fasta_path.write_text(req.fasta_content)
 
@@ -45,8 +44,7 @@ async def predict_job(req: PredictBoltzRequest):  # type: ignore[no-untyped-def]
 async def predict_boltz_job(req: PredictBoltzRequest):  # type: ignore[no-untyped-def]
     """Submit a Boltz-2 prediction job."""
     safe_name = safe_filename(req.name)
-    job_dir = settings.workspace_path / "boltz" / safe_name
-    job_dir.mkdir(parents=True, exist_ok=True)
+    job_dir = new_job_dir("boltz", safe_name)
     fasta_path = job_dir / f"{safe_name}.fasta"
     fasta_path.write_text(req.fasta_content)
 
