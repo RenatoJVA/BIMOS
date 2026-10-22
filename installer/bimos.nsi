@@ -109,19 +109,13 @@ Section "BIMOS Core (required)" SecCore
     WriteUninstaller "$INSTDIR\Uninstall.exe"
 SectionEnd
 
-Section "-Docker images (optional)" SecDocker
-    SetOutPath "$INSTDIR\dockers"
-    ; DOCKERS_DIR_PATH will be replaced by builder.py
-    File /r "DOCKERS_DIR_PATH\*.*"
-SectionEnd
-
 ; --- Section descriptions ---
+; NOTE: the Dockerfile ships inside the Nuitka standalone tree ($INSTDIR\dockers)
+; and is copied by the Core section, so it is not duplicated in a separate one.
 LangString DESC_SecCore   ${LANG_ENGLISH} "Core BIMOS application and GUI launcher."
-LangString DESC_SecDocker ${LANG_ENGLISH} "Bundled Docker compose files for docking/MD pipelines."
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
     !insertmacro MUI_DESCRIPTION_TEXT ${SecCore}   $(DESC_SecCore)
-    !insertmacro MUI_DESCRIPTION_TEXT ${SecDocker} $(DESC_SecDocker)
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 ; ============================================================

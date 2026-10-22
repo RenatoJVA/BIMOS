@@ -12,10 +12,8 @@ chmod 755 /usr/bin/bimos
 if [ -d /opt/bimos/lib ]; then
     chmod -R 755 /opt/bimos/lib
 fi
-# Docker pipeline files
-if [ -d /opt/bimos/dockers ]; then
-    chmod -R 755 /opt/bimos/dockers
-fi
+# Docker pipeline files live under /opt/bimos/lib/dockers and are covered by
+# the recursive chmod above; there is no second copy to fix permissions on.
 
 # ── Desktop database ──────────────────────────────────────
 if command -v update-desktop-database >/dev/null 2>&1; then

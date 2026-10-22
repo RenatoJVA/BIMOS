@@ -9,8 +9,8 @@
 # what a build consumes. A stale .venv or node_modules inside the context is
 # the classic way to ship an image that only works on the maintainer's machine.
 #
-# NOTE: the API builder stage does `COPY pyproject.toml README.md ./`, so those
-# two files must never be listed here.
+# NOTE: the API builder stage does `COPY pyproject.toml README.md ./` and
+# `COPY bimos ./bimos`, so those three paths must never be listed here.
 
 # --- Python -----------------------------------------------------------------
 __pycache__/
