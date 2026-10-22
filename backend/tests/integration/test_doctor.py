@@ -452,8 +452,13 @@ def test_screen_guard_honours_the_selected_qm_backend(runner: CliRunner) -> None
         patches = _patch_hardware(total_gb=64.0)
         for p in patches:
             p.start()
+        fake_screen = {
+            "status": "completed", "candidates": [], "vina_scores": [],
+            "holo_dirs": [], "report": "",
+        }
         try:
-            orca_result = invoke("orca", protein, ligand_dir, str(outputs / "orca"))
+            with patch("bimos.screening.run_screen", return_value=fake_screen):
+                orca_result = invoke("orca", protein, ligand_dir, str(outputs / "orca"))
             g16_result = invoke("g16", protein, ligand_dir, str(outputs / "g16"))
         finally:
             for p in patches:

@@ -29,6 +29,20 @@ def packaged_boltz_config() -> Any:
         yield defaults
 
 
+def _best_struct(tmp_path: Path, pred_dir: Path) -> Path:
+    path = tmp_path / "out" / "best.cif"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("data_best\n")
+    return path
+
+
+def _best_json(tmp_path: Path) -> Path:
+    path = tmp_path / "out" / "best.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{}")
+    return path
+
+
 def test_write_boltz_yaml(tmp_path: Path) -> None:
     fasta = tmp_path / "test.fasta"
     fasta.write_text(">protein\nMKFLILFNILVSTLAFLSSSFAQVREIYHQHQHYINEQSSELKWHES\n")
@@ -272,9 +286,9 @@ def test_model_flag_reaches_the_container(
     fasta.write_text(">seq\nMKTAYIAKQRQISFVKSHFSRQ\n")
     captured: list[list[str]] = []
 
-    def fake_run(**kwargs: Any) -> dict[str, Any]:
+    def fake_run(**kwargs: Any) -> int:
         captured.append(list(kwargs["command"]))
-        return {"returncode": 0, "stdout": "", "stderr": ""}
+        return 0
 
     gpu = GpuInfo(name="NVIDIA RTX 4090", vram_total_gb=24.0, vram_free_gb=23.0)
     with (
@@ -283,7 +297,11 @@ def test_model_flag_reaches_the_container(
         patch("bimos.prediction.boltz.BoltzPipeline._preflight_gpu"),
         patch(
             "bimos.prediction.boltz.pick_best_boltz",
-            return_value=(tmp_path / "out" / "best.cif", 0.5),
+            side_effect=lambda pred_dir: {
+                "struct_path": _best_struct(tmp_path, pred_dir),
+                "json_path": _best_json(tmp_path),
+                "score": 0.5,
+            },
         ),
     ):
         result = runner.invoke(
@@ -292,7 +310,7 @@ def test_model_flag_reaches_the_container(
 
     assert result.exit_code == 0, result.output
     assert captured, "the container was never invoked"
-    command = captured[0]
+    command = next(cmd for cmd in captured if cmd and cmd[0] == "boltz")
     assert command[command.index("--model") + 1] == "boltz1"
     # Boltz-1 is tuned for 1.638, so the override must not silently pair it
     # with the Boltz-2 step scale from the packaged config.
@@ -308,9 +326,9 @@ def test_model_flag_defaults_to_the_config(
     fasta.write_text(">seq\nMKTAYIAKQRQISFVKSHFSRQ\n")
     captured: list[list[str]] = []
 
-    def fake_run(**kwargs: Any) -> dict[str, Any]:
+    def fake_run(**kwargs: Any) -> int:
         captured.append(list(kwargs["command"]))
-        return {"returncode": 0, "stdout": "", "stderr": ""}
+        return 0
 
     gpu = GpuInfo(name="NVIDIA RTX 4090", vram_total_gb=24.0, vram_free_gb=23.0)
     with (
@@ -319,13 +337,17 @@ def test_model_flag_defaults_to_the_config(
         patch("bimos.prediction.boltz.BoltzPipeline._preflight_gpu"),
         patch(
             "bimos.prediction.boltz.pick_best_boltz",
-            return_value=(tmp_path / "out" / "best.cif", 0.5),
+            side_effect=lambda pred_dir: {
+                "struct_path": _best_struct(tmp_path, pred_dir),
+                "json_path": _best_json(tmp_path),
+                "score": 0.5,
+            },
         ),
     ):
         result = runner.invoke(cli, ["predict", str(fasta), "-o", str(tmp_path / "out"), "-n", "1"])
 
     assert result.exit_code == 0, result.output
-    command = captured[0]
+    command = next(cmd for cmd in captured if cmd and cmd[0] == "boltz")
     assert command[command.index("--model") + 1] == "boltz2"
     assert float(command[command.index("--step_scale") + 1]) == 1.5
 

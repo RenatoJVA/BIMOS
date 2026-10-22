@@ -472,3 +472,19 @@ def test_qm_memory_uses_the_selected_backend() -> None:
     ):
         assert _qm_memory_gb("orca") == pytest.approx(31.25)
         assert _qm_memory_gb("gaussian") == pytest.approx(32.0)
+
+
+def test_qm_memory_reads_the_active_max_profile(tmp_path, monkeypatch) -> None:
+    """The guard must see the same per-job footprint the pipeline will request."""
+    from bimos.shared.hardware import MemInfo
+
+    monkeypatch.setattr("bimos.shared.user_config.settings.base_path", tmp_path)
+    monkeypatch.setattr("bimos.shared.user_config.settings.max_threads", True)
+    monkeypatch.setattr("bimos.shared.user_config.settings.get_threads", lambda: 16)
+    monkeypatch.setattr(
+        "bimos.shared.hardware.detect_mem",
+        lambda: MemInfo(total_gb=512.0, avail_gb=500.0),
+    )
+
+    assert _qm_memory_gb("orca") == pytest.approx(64.0)
+    assert _qm_memory_gb("gaussian") == pytest.approx(64.0)

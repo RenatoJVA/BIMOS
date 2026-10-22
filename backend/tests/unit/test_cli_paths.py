@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Any
 
+import click
 import pytest
 from click.testing import CliRunner
 
@@ -88,6 +89,9 @@ class _FakeStore:
     def start(self, job_id: str) -> None:
         self.events.append("start")
 
+    def get(self, job_id: str) -> None:
+        return None
+
     def log(self, job_id: str, line: str) -> None:
         self.events.append("log")
 
@@ -96,6 +100,10 @@ class _FakeStore:
 
     def fail(self, job_id: str, error: str) -> None:
         self.events.append("fail")
+
+    def cancel(self, job_id: str) -> bool:
+        self.events.append("cancel")
+        return True
 
 
 def test_run_tracked_foreground_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -122,11 +130,32 @@ def test_run_tracked_failure_marks_job(monkeypatch: pytest.MonkeyPatch) -> None:
     def _run(emit: Any) -> dict[str, Any]:
         raise RuntimeError("boom")
 
-    run_tracked(
-        kind="dock", meta={}, output=None, background=False, gui=False,
-        gui_message="", run_fn=_run, summarize=lambda r: None,
-    )
+    with pytest.raises(click.exceptions.Exit) as exc_info:
+        run_tracked(
+            kind="dock", meta={}, output=None, background=False, gui=False,
+            gui_message="", run_fn=_run, summarize=lambda r: None,
+        )
+    assert exc_info.value.exit_code == 1
     assert fake.events == ["create", "start", "fail"]
+
+
+def test_run_tracked_cancellation_marks_job(monkeypatch: pytest.MonkeyPatch) -> None:
+    from bimos.infrastructure import cancellation
+
+    fake = _FakeStore()
+    monkeypatch.setattr("bimos.infrastructure.job_store.store", fake)
+
+    def _run(emit: Any) -> dict[str, Any]:
+        cancellation.request("job123")
+        return {"status": "completed"}
+
+    with pytest.raises(click.exceptions.Exit) as exc_info:
+        run_tracked(
+            kind="dock", meta={}, output=None, background=False, gui=False,
+            gui_message="", run_fn=_run, summarize=lambda r: None,
+        )
+    assert exc_info.value.exit_code == 1
+    assert fake.events == ["create", "start", "cancel"]
 
 
 @pytest.fixture

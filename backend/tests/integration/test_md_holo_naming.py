@@ -27,6 +27,8 @@ def _fake_gmx(self, args: list[str], cwd, stdin: str = "") -> int:
 
     cwd = _Path(cwd)
     opts = {args[i]: args[i + 1] for i in range(len(args) - 1) if args[i].startswith("-")}
+    if args[0] == "mdrun" and "-g" in opts:
+        (cwd / opts["-g"]).write_text("Converged to Fmax!\n")
     for flag in ("-o", "-p"):
         if flag in opts:
             dest = cwd / opts[flag]

@@ -287,3 +287,21 @@ def test_screen_rejects_top_n_zero(tmp_path: Path, library: Path, inputs: dict[s
         ],
     )
     assert result.exit_code != 0
+
+
+def test_protein_eq_skips_apo_and_advances_to_dock(
+    tmp_path: Path, library: Path, inputs: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _install_mocks(monkeypatch, _ranking())
+    out = tmp_path / "screen-eq"
+    result = ScreenCascade(output_dir=str(out)).run(
+        protein_eq=inputs["protein"], ligands_sdf=inputs["sdf"], ligand_dir=str(library)
+    )
+
+    assert result["status"] == "completed"
+    assert result["candidates"] == ["JZ4", "L2"]
+    # Only the two HOLO runs, no APO MD.
+    assert calls == {"md": 2, "dock": 1, "qm": 2}
+    state = json.loads((out / "screen.json").read_text())
+    assert state["stage"] == "done"
+    assert "apo_dir" not in state["artifacts"]

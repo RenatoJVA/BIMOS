@@ -4,7 +4,11 @@ import pytest
 
 from bimos.config.settings import settings
 from bimos.quantum_chemistry.itp import update_itp_charges
-from bimos.quantum_chemistry.pipeline import GaussianPipeline, OrcaPipeline
+from bimos.quantum_chemistry.pipeline import (
+    GaussianPipeline,
+    OrcaPipeline,
+    parse_gaussian_hirshfeld_charges,
+)
 
 
 def _make_orca_pipeline(charge: int = 0):
@@ -108,3 +112,30 @@ def test_update_itp_skips_comments(tmp_path: Path) -> None:
     content = result.read_text()
     assert "; comment" in content
     assert "0.1234" in content
+
+
+def test_gaussian_charges_stop_before_hydrogens_summed_block(tmp_path: Path) -> None:
+    """Regression guard: the second Hirshfeld table must not be appended.
+
+    Gaussian prints a summary table with hydrogens summed into heavy atoms
+    after the per-atom table. The old parser used ``parts[1:2]`` instead of
+    ``parts[:1]`` to detect the ``Tot`` row, so it collected both tables and
+    rejected every real calculation with ``22 ITP atoms vs 32 charges``.
+    """
+    log = tmp_path / "JZ4.log"
+    log.write_text(
+        " Hirshfeld charges, spin densities, dipoles, and CM5 charges using IRadAn=      5:\n"
+        "     1  H    0.166247   0.000000\n"
+        "     2  O   -0.200619   0.000000\n"
+        "       Tot  -0.000020   0.000000\n"
+        " Hirshfeld charges with hydrogens summed into heavy atoms:\n"
+        "     2  O   -0.034372  -0.064556\n"
+        "\n"
+    )
+    assert parse_gaussian_hirshfeld_charges(log) == pytest.approx([0.166247, -0.200619])
+
+
+def test_gaussian_charges_are_empty_without_the_table(tmp_path: Path) -> None:
+    log = tmp_path / "empty.log"
+    log.write_text("Normal termination of Gaussian\n")
+    assert parse_gaussian_hirshfeld_charges(log) == []
