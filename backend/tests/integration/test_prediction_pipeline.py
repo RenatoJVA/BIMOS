@@ -43,6 +43,19 @@ def _best_json(tmp_path: Path) -> Path:
     return path
 
 
+class _NullGpuMonitor:
+    """Keep CLI tests off the host GPU: no nvidia-smi, no background thread."""
+
+    def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+        pass
+
+    def start(self) -> None:
+        pass
+
+    def stop_and_report(self) -> None:
+        pass
+
+
 def test_write_boltz_yaml(tmp_path: Path) -> None:
     fasta = tmp_path / "test.fasta"
     fasta.write_text(">protein\nMKFLILFNILVSTLAFLSSSFAQVREIYHQHQHYINEQSSELKWHES\n")
@@ -295,6 +308,8 @@ def test_model_flag_reaches_the_container(
         patch("bimos.shared.hardware.detect_gpus", return_value=[gpu]),
         patch("bimos.infrastructure.container.run", side_effect=fake_run),
         patch("bimos.prediction.boltz.BoltzPipeline._preflight_gpu"),
+        patch("bimos.prediction.boltz.BoltzPipeline._gpu_evidence"),
+        patch("bimos.prediction.boltz._GpuHostMonitor", _NullGpuMonitor),
         patch(
             "bimos.prediction.boltz.pick_best_boltz",
             side_effect=lambda pred_dir: {
@@ -310,7 +325,8 @@ def test_model_flag_reaches_the_container(
 
     assert result.exit_code == 0, result.output
     assert captured, "the container was never invoked"
-    command = next(cmd for cmd in captured if cmd and cmd[0] == "boltz")
+    command = captured[0]
+    assert command[0] == "boltz"
     assert command[command.index("--model") + 1] == "boltz1"
     # Boltz-1 is tuned for 1.638, so the override must not silently pair it
     # with the Boltz-2 step scale from the packaged config.
@@ -335,6 +351,8 @@ def test_model_flag_defaults_to_the_config(
         patch("bimos.shared.hardware.detect_gpus", return_value=[gpu]),
         patch("bimos.infrastructure.container.run", side_effect=fake_run),
         patch("bimos.prediction.boltz.BoltzPipeline._preflight_gpu"),
+        patch("bimos.prediction.boltz.BoltzPipeline._gpu_evidence"),
+        patch("bimos.prediction.boltz._GpuHostMonitor", _NullGpuMonitor),
         patch(
             "bimos.prediction.boltz.pick_best_boltz",
             side_effect=lambda pred_dir: {
@@ -347,7 +365,8 @@ def test_model_flag_defaults_to_the_config(
         result = runner.invoke(cli, ["predict", str(fasta), "-o", str(tmp_path / "out"), "-n", "1"])
 
     assert result.exit_code == 0, result.output
-    command = next(cmd for cmd in captured if cmd and cmd[0] == "boltz")
+    command = captured[0]
+    assert command[0] == "boltz"
     assert command[command.index("--model") + 1] == "boltz2"
     assert float(command[command.index("--step_scale") + 1]) == 1.5
 
