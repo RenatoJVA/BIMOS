@@ -119,6 +119,9 @@ Prefer fixing a yellow by lowering the value in `~/.bimos/config/`. Use
 
 ### 4.1 Ligand Databases
 
+Set `BIMOS_DATABASE_URL` to your PostgreSQL instance before using these
+commands; the packaged template does not include credentials.
+
 Curated sets for virtual screening without preparing your own library:
 
 - `candidates_1000`: mixed drugs + phytocompounds.

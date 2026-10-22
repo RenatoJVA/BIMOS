@@ -1,5 +1,20 @@
 # ROADMAP — Trabajo futuro
 
+## R-ROAD-00 · Estabilización post-auditoría (EN CURSO — prioridad)
+
+**Estado:** En curso (2026-10-21). Detalle, criterios de aceptación y orden de
+ejecución en [`PLAN.md`](./PLAN.md). Ningún frente de R-ROAD-01/R-ROAD-02 se retoma
+hasta cerrar los P0 de este bloque.
+
+Base validada: `7a5bbda` (lint OK; suite 463 passed, 2 skipped). Alcance:
+
+- P0 build/release: imagen API construible, `fpm` en CI, compose sin socket.
+- P0 recursos: `--max`, `--jobs` y `cpu_per_job` propagados de verdad.
+- P0 correctitud: `screen --protein-eq` y validación real de minimización MD.
+- P0 ciclo de vida: cancelación/SSE, exit codes y cancelación de jobs CLI.
+- P0 API: ejecución host-only, directorios únicos, límites de upload y token
+  obligatorio fuera de loopback.
+
 ## R-ROAD-01 · Builds multiplataforma (Windows y macOS) vía CI
 
 **Estado:** Observado y postergado (2026-10-20, decisión del operador). El flujo Linux
@@ -35,8 +50,10 @@ está compilado, verificado y distribuido (backend/dist + installer/dist, SHA256
    notarización (secrets de CI); sin firma, Gatekeeper bloquea el `.app` — definir si
    se compra cuenta Apple Developer o cada usuario firma localmente.
 5. Riesgos a validar en la primera corrida: backend pywebview en WinForms y Qt
-   WebEngine en macOS; NSIS/create-dmg del builder; presencia de `scripts/` en el
-   payload por plataforma (el `.deb` actual no lo incluye, se prefiere source tree).
+   WebEngine en macOS; NSIS/create-dmg del builder. El payload Linux actual sí
+   incluye `scripts/` y `ui/` bajo `/opt/bimos/lib/bimos/` (verificado con
+   `dpkg-deb -c`); el problema pendiente es la duplicación `lib/dockers` +
+   `opt/bimos/dockers`, no la ausencia de scripts.
 
 Referencias: `DOCS/consultorias/consultoria-12…§9` (matriz de compatibilidad),
 `AGENTS.md` (estado actual), `.github/workflows/build.yml` (jobs reservados).

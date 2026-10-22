@@ -22,7 +22,7 @@
 
 ## Features
 
-- **Protein Structure Prediction** — Predict 3D structures from amino acid sequences using Boltz-1 (GPU).
+- **Protein Structure Prediction** — Predict 3D structures from amino acid sequences using Boltz-2 (GPU).
 - **Molecular Docking** — High-throughput virtual screening with AutoDock Vina using built-in curated ligand databases.
 - **Molecular Dynamics** — Automated GROMACS simulation pipeline (solvation, ionization, minimization, NVT, NPT, production).
 - **Quantum Mechanics** — Automated Hirshfeld charge refinement via ORCA or Gaussian 16 pipelines with `.itp` integration.
@@ -83,6 +83,8 @@ bimos qm-orca ./ligands -j 4 --charge 0
 ## Documentation
 
 See [MANUAL.md](./MANUAL.md) for a comprehensive user guide covering all workflows, job management, and configuration.
+For releases, GPU hosts, remote API access and the optional Compose stack, see
+[docs/deployment.md](./docs/deployment.md).
 
 ```bash
 # Or view the manual from the CLI
@@ -113,7 +115,7 @@ BIMOS orchestrates several third-party computational tools. Open-source tools ar
 | AutoDock Vina | Molecular docking | Apache 2.0 | Yes (image) |
 | GROMACS | Molecular dynamics | GPL-2.0-or-later | Yes (image) |
 | Boltz (code + weights) | Structure prediction | MIT | Yes (image) |
-| Meeko | Cheminformatics | LGPL-2.1 | Yes (image, pinned v0.7.1) |
+| Meeko | Cheminformatics | LGPL-2.1 | Yes (image, pinned v0.8.0) |
 | RDKit / PyTorch | Cheminformatics / ML | BSD | Yes (image) |
 | FFTW3 / MPI / CUDA / Ubuntu | System base | GPL / EULA / various | Yes (image base) |
 | OpenBabel | Format conversion | GPL-2.0 | No (host prerequisite for QM) |
