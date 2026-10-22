@@ -1,6 +1,8 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from bimos.infrastructure import container as container_module
 
 
@@ -142,3 +144,86 @@ def test_get_proc_env_with_ssh(mock_settings) -> None:
     env = container_module._get_proc_env()
     assert "DOCKER_HOST" in env
     assert "ssh://bimos@192.168.1.100" in env["DOCKER_HOST"]
+
+def test_run_raw_command_does_not_require_container_runtime() -> None:
+    """A raw command (image="") must not call podman/docker detection."""
+    with patch(
+        "bimos.infrastructure.container._detect_runtime",
+        side_effect=AssertionError("runtime detection must be skipped"),
+    ):
+        with patch("subprocess.Popen") as mock_popen:
+            proc_mock = MagicMock()
+            proc_mock.stdout = []
+            proc_mock.wait.return_value = 0
+            proc_mock.pid = 12345
+            mock_popen.return_value = proc_mock
+
+            rc = container_module.run(command=["echo", "hello"])
+
+    assert rc == 0
+
+
+def test_container_library_path_per_architecture() -> None:
+    x86 = container_module._container_library_path("x86_64")
+    arm = container_module._container_library_path("aarch64")
+
+    assert "/lib/x86_64-linux-gnu" in x86
+    assert "/lib/aarch64-linux-gnu" in arm
+    assert "/usr/local/cuda/lib64" in x86
+    assert "/usr/local/cuda/lib64" in arm
+
+
+@patch("bimos.infrastructure.container._detect_runtime", return_value="podman")
+def test_read_only_mount_uses_ro_flag(mock_detect) -> None:
+    with patch("subprocess.Popen") as mock_popen:
+        proc_mock = MagicMock()
+        proc_mock.stdout = []
+        proc_mock.wait.return_value = 0
+        proc_mock.pid = 12345
+        mock_popen.return_value = proc_mock
+
+        rc = container_module.run(
+            command=["python3", "/scripts/tool.py"],
+            image="test:latest",
+            volumes={"/host/work": "/work", "/host/scripts": "/scripts"},
+            read_only={"/scripts"},
+        )
+
+    assert rc == 0
+    cmd = mock_popen.call_args.args[0]
+    mounts = [cmd[i + 1] for i, arg in enumerate(cmd) if arg == "-v"]
+    assert any(mount.endswith("/scripts:ro,Z") for mount in mounts)
+    assert any(mount.endswith("/work:Z") for mount in mounts)
+
+
+@patch("bimos.infrastructure.container._detect_runtime", return_value="podman")
+def test_run_raises_explicit_timeout_error(mock_detect) -> None:
+    with patch("bimos.infrastructure.container._wait_for", return_value=container_module.TIMED_OUT_RC):
+        with patch("subprocess.Popen") as mock_popen:
+            proc_mock = MagicMock()
+            proc_mock.stdout = []
+            proc_mock.pid = 12345
+            mock_popen.return_value = proc_mock
+
+            with pytest.raises(container_module.ContainerTimeoutError, match="timed out"):
+                container_module.run(command=["sleep", "999"], image="test:latest", raise_on_error=True)
+
+
+@patch("bimos.infrastructure.container._detect_runtime", return_value="podman")
+def test_run_raises_explicit_cancel_error(mock_detect) -> None:
+    with patch("bimos.infrastructure.container._wait_for", return_value=container_module.CANCELED_RC):
+        with patch("subprocess.Popen") as mock_popen:
+            proc_mock = MagicMock()
+            proc_mock.stdout = []
+            proc_mock.pid = 12345
+            mock_popen.return_value = proc_mock
+
+            with pytest.raises(container_module.ContainerCanceledError, match="canceled"):
+                container_module.run(command=["sleep", "999"], image="test:latest", raise_on_error=True)
+
+
+@patch("bimos.infrastructure.container._detect_runtime", return_value="podman")
+def test_run_raises_explicit_runtime_error(mock_detect) -> None:
+    with patch("subprocess.Popen", side_effect=FileNotFoundError()):
+        with pytest.raises(container_module.ContainerRuntimeNotFoundError, match="not found"):
+            container_module.run(command=["gmx"], image="test:latest", raise_on_error=True)

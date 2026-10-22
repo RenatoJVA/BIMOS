@@ -236,3 +236,63 @@ def test_predict_endpoint_with_num_models(client: TestClient, tmp_path: Path, mo
                 },
             )
             assert response.status_code == 202
+
+
+def _temp_store(tmp_path: Path):
+    from bimos.infrastructure.job_store import FileJobStore
+
+    store = FileJobStore()
+    store.jobs_dir = tmp_path / ".jobs"
+    store.jobs_dir.mkdir(parents=True, exist_ok=True)
+    return store
+
+
+def test_stream_logs_replays_from_offset_and_closes(client: TestClient, tmp_path: Path, monkeypatch) -> None:
+    store = _temp_store(tmp_path)
+    job = store.create(kind="dock")
+    store.log(job.id, "line-1")
+    store.log(job.id, "line-2")
+    store.complete(job.id, exit_code=0)
+    monkeypatch.setattr("bimos.api.endpoints.jobs.store", store)
+    monkeypatch.setattr("bimos.api.utils.store", store)
+
+    response = client.get(f"/api/v1/jobs/{job.id}/logs/stream")
+    assert response.status_code == 200
+    assert "line-1" in response.text
+    assert "line-2" in response.text
+    assert '"status": "completed"' in response.text
+
+    offset = len("line-1\n")
+    response = client.get(f"/api/v1/jobs/{job.id}/logs/stream", params={"offset": offset})
+    assert "line-1" not in response.text
+    assert "line-2" in response.text
+
+
+def test_cancel_terminal_job_returns_conflict(client: TestClient, tmp_path: Path, monkeypatch) -> None:
+    store = _temp_store(tmp_path)
+    job = store.create(kind="dock")
+    store.start(job.id)
+    store.complete(job.id, exit_code=0)
+    monkeypatch.setattr("bimos.api.endpoints.jobs.store", store)
+    monkeypatch.setattr("bimos.api.utils.store", store)
+
+    response = client.post(f"/api/v1/jobs/{job.id}/cancel")
+    assert response.status_code == 409
+    assert store.get(job.id).status.value == "completed"
+
+
+def test_dock_rejects_oversized_upload(client: TestClient, tmp_path: Path, monkeypatch) -> None:
+    from bimos.api import utils as api_utils
+    from bimos.config.settings import settings as bimos_settings
+
+    monkeypatch.setattr(bimos_settings, "workspace_path", tmp_path)
+    monkeypatch.setattr(api_utils, "MAX_UPLOAD_BYTES", 8)
+
+    response = client.post(
+        "/api/v1/dock",
+        files={
+            "protein": ("test.pdb", b"ATG" * 20, "application/octet"),
+            "ligands": ("ligands.sdf", b"ligand data", "chemical/x-mdl-sdfile"),
+        },
+    )
+    assert response.status_code == 413

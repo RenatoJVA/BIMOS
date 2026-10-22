@@ -1,3 +1,6 @@
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -105,3 +108,58 @@ def test_settings_bimos_image_default() -> None:
 def test_settings_cache_path_default() -> None:
     s = Settings()
     assert s.cache_path is not None
+
+def _isolated_env(tmp_path: Path) -> dict[str, str]:
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("BIMOS_") and key not in {"ORCA_PATH", "GAUSSIAN_PATH"}
+    }
+    env["BIMOS_BASE_PATH"] = str(tmp_path)
+    return env
+
+
+def test_import_does_not_create_user_config(tmp_path: Path) -> None:
+    """Importing settings must not write ~/.bimos or print a welcome banner."""
+    backend = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [sys.executable, "-c", "import bimos.config.settings"],
+        cwd=backend,
+        env=_isolated_env(tmp_path),
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not (tmp_path / ".env").exists()
+    assert not (tmp_path / "config").exists()
+    assert "Welcome to BIMOS" not in result.stderr
+
+
+def test_initialize_creates_and_loads_user_config(tmp_path: Path) -> None:
+    backend = Path(__file__).resolve().parents[2]
+    code = (
+        "from bimos.config.settings import BIMOS_BASE, BIMOS_ENV_FILE, initialize, settings\n"
+        "created = initialize(announce=False)\n"
+        "assert created is True\n"
+        "assert BIMOS_ENV_FILE.exists()\n"
+        "assert settings.workspace_path == BIMOS_BASE / 'workspace'\n"
+        "assert settings.cache_path == BIMOS_BASE / 'cache'\n"
+        "assert initialize(announce=False) is False\n"
+    )
+    result = subprocess.run(  # noqa: S603 - fixed argv, trusted interpreter
+        [sys.executable, "-c", code],
+        cwd=backend,
+        env=_isolated_env(tmp_path),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / ".env").exists()
+    assert (tmp_path / "config" / "docking.yaml").exists()
+    assert "Welcome to BIMOS" not in result.stderr

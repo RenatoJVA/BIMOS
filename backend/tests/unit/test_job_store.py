@@ -180,7 +180,7 @@ def test_concurrent_complete_no_race(tmp_path: Path) -> None:
     assert store.get(j2.id).status == JobStatus.COMPLETED
 
 
-def test_cancel_can_override_completed(tmp_path: Path) -> None:
+def test_cancel_does_not_override_completed(tmp_path: Path) -> None:
     from bimos.infrastructure.job_store import FileJobStore
     store = FileJobStore()
     store.jobs_dir = tmp_path / ".jobs"
@@ -188,8 +188,35 @@ def test_cancel_can_override_completed(tmp_path: Path) -> None:
     job = store.create("dock")
     store.start(job.id)
     store.complete(job.id, exit_code=0)
+    assert store.cancel(job.id) is False
+    assert store.get(job.id).status == JobStatus.COMPLETED
+
+
+def test_complete_does_not_override_canceled(store: FileJobStore) -> None:
+    job = store.create(kind="dock")
+    store.start(job.id)
     store.cancel(job.id)
+    store.complete(job.id, exit_code=0, results={"score": -1})
     assert store.get(job.id).status == JobStatus.CANCELED
+
+
+def test_fail_does_not_override_canceled(store: FileJobStore) -> None:
+    job = store.create(kind="dock")
+    store.start(job.id)
+    store.cancel(job.id)
+    store.fail(job.id, "late failure")
+    assert store.get(job.id).status == JobStatus.CANCELED
+
+
+def test_read_log_chunk_uses_byte_offset(store: FileJobStore) -> None:
+    job = store.create(kind="dock")
+    store.log(job.id, "line-1")
+    store.log(job.id, "line-2")
+    text, offset = store.read_log_chunk(job.id, 0)
+    assert "line-1" in text and "line-2" in text
+    text2, offset2 = store.read_log_chunk(job.id, offset)
+    assert text2 == ""
+    assert offset2 == offset
 
 
 def test_atomic_write_survives_crash(tmp_path: Path) -> None:

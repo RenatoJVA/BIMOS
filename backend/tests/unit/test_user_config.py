@@ -73,3 +73,70 @@ def test_ensure_user_configs_creates_files(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "defaults" / "docking.yaml").write_text("key: value\n")
     ensure_user_configs()
     assert (tmp_path / "config" / "docking.yaml").exists()
+
+
+def test_max_profile_caps_qm_jobs_to_installed_ram(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """``--max`` must not request more QM jobs than the host RAM can hold.
+
+    Regression guard: on a 126 GB host the MAX profile asked for 8 ORCA jobs
+    at 32 GB each (250 GB), so the hardware guard blocked every QM run before
+    the pipeline could start.
+    """
+    from bimos.shared.hardware import MemInfo
+
+    monkeypatch.setattr("bimos.shared.user_config.settings.base_path", tmp_path)
+    monkeypatch.setattr("bimos.shared.user_config.settings.max_threads", True)
+    monkeypatch.setattr("bimos.shared.user_config.settings.get_threads", lambda: 16)
+    monkeypatch.setattr(
+        "bimos.shared.hardware.detect_mem",
+        lambda: MemInfo(total_gb=126.0, avail_gb=113.0),
+    )
+
+    orca, _ = resolve("orca", max_mode=True)
+    gaussian, _ = resolve("gaussian", max_mode=True)
+
+    assert orca["orca"]["maxcore_mb"] == 32768
+    assert gaussian["gaussian"]["mem"] == "32GB"
+    assert orca["orca"]["max_jobs"] == 3
+    assert gaussian["gaussian"]["max_jobs"] == 3
+
+
+def test_max_profile_uses_64gb_per_job_when_two_fit(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from bimos.shared.hardware import MemInfo
+
+    monkeypatch.setattr("bimos.shared.user_config.settings.base_path", tmp_path)
+    monkeypatch.setattr("bimos.shared.user_config.settings.max_threads", True)
+    monkeypatch.setattr("bimos.shared.user_config.settings.get_threads", lambda: 16)
+    monkeypatch.setattr(
+        "bimos.shared.hardware.detect_mem",
+        lambda: MemInfo(total_gb=512.0, avail_gb=500.0),
+    )
+
+    orca, _ = resolve("orca", max_mode=True)
+    gaussian, _ = resolve("gaussian", max_mode=True)
+
+    assert orca["orca"]["maxcore_mb"] == 65536
+    assert gaussian["gaussian"]["mem"] == "64GB"
+    assert orca["orca"]["max_jobs"] == 8
+    assert gaussian["gaussian"]["max_jobs"] == 8
+
+def test_custom_profile_keeps_new_packaged_defaults(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Upgrades must not drop defaults absent from an older custom file."""
+    monkeypatch.setattr("bimos.shared.user_config.settings.base_path", tmp_path)
+    monkeypatch.setattr("bimos.shared.user_config.settings.max_threads", False)
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "docking.yaml").write_text("vina:\n  times: 7\n", encoding="utf-8")
+
+    data, profile = resolve("docking", max_mode=False)
+
+    assert profile == ConfigProfile.CUSTOM
+    assert data["vina"]["times"] == 7
+    assert data["vina"]["exhaustiveness"] == 12
+    assert data["grid"]["mode"] == "auto"

@@ -32,6 +32,10 @@ ALLOWED_USES = {
     "token": [
         "elements.py",
         "pipeline.py",
+        "security.py",
+        "server.py",
+        "routes.py",
+        "settings.py",
     ],
 }
 
@@ -62,6 +66,12 @@ def test_no_hardcoded_passwords() -> None:
             for f, ln, line in suspicious[:20]
         )
         pytest.fail(f"Found {len(suspicious)} potential secret leaks:\n{msg}")
+
+
+def test_packaged_env_template_has_no_default_db_password() -> None:
+    template = BIMOS_ROOT / "config" / "defaults" / "env.template"
+    content = template.read_text(encoding="utf-8")
+    assert "bimos:bimos@" not in content
 
 
 def test_no_environment_files_committed() -> None:

@@ -1,4 +1,7 @@
 from pathlib import Path
+from typing import Any
+
+import pytest
 
 from bimos.molecular_dynamics.pipeline import MolecularDynamicsPipeline, Stage
 
@@ -90,3 +93,113 @@ def test_get_parallel_args(monkeypatch) -> None:
     pipeline = MolecularDynamicsPipeline(output_dir="/tmp")
     args = pipeline._get_parallel_args()
     assert args == ["-ntmpi", "1", "-ntomp", "4"]
+
+
+def _minimization_fake(converged: bool = True, rc: int = 0) -> Any:
+    calls: list[list[str]] = []
+
+    def _gmx(args: list[str], work: Path, stdin: str = "") -> int:
+        calls.append(args)
+        if args[0] == "mdrun" and rc == 0:
+            log_name = args[args.index("-g") + 1]
+            (work / log_name).write_text(
+                "Converged to Fmax!\n" if converged else "did not converge to Fmax\n"
+            )
+        return rc
+
+    return calls, _gmx
+
+
+def test_minimization_uses_explicit_log_and_convergence(tmp_path: Path, monkeypatch) -> None:
+    pipeline = MolecularDynamicsPipeline(output_dir=str(tmp_path))
+    calls, fake = _minimization_fake()
+    monkeypatch.setattr(pipeline, "_gmx", fake)
+
+    pipeline._run_minimization("comp", tmp_path, is_holo=False)
+
+    assert (tmp_path / "min-comp-steep-mdrun.log").exists()
+    assert (tmp_path / "min-comp-cg-mdrun.log").exists()
+    mdrun_calls = [args for args in calls if args[0] == "mdrun"]
+    assert len(mdrun_calls) == 2
+    assert all("-g" in args for args in mdrun_calls)
+
+
+def test_minimization_fails_on_grompp_error(tmp_path: Path, monkeypatch) -> None:
+    pipeline = MolecularDynamicsPipeline(output_dir=str(tmp_path))
+    _, fake = _minimization_fake(rc=1)
+    monkeypatch.setattr(pipeline, "_gmx", fake)
+
+    with pytest.raises(RuntimeError, match="grompp failed"):
+        pipeline._run_minimization("comp", tmp_path, is_holo=False)
+
+
+def test_minimization_fails_without_log(tmp_path: Path, monkeypatch) -> None:
+    pipeline = MolecularDynamicsPipeline(output_dir=str(tmp_path))
+
+    def _gmx(args: list[str], work: Path, stdin: str = "") -> int:
+        return 0
+
+    monkeypatch.setattr(pipeline, "_gmx", _gmx)
+
+    with pytest.raises(RuntimeError, match="no minimization log"):
+        pipeline._run_minimization("comp", tmp_path, is_holo=False)
+
+
+def test_minimization_fails_when_not_converged(tmp_path: Path, monkeypatch) -> None:
+    pipeline = MolecularDynamicsPipeline(output_dir=str(tmp_path))
+    _, fake = _minimization_fake(converged=False)
+    monkeypatch.setattr(pipeline, "_gmx", fake)
+    # Force a single iteration so the non-convergence path is exercised.
+    object.__setattr__(pipeline.md_config, "max_min_iterations", 1)
+
+    with pytest.raises(RuntimeError, match="did not converge"):
+        pipeline._run_minimization("comp", tmp_path, is_holo=False)
+
+
+def test_detect_stage_requires_new_minimization_logs(tmp_path: Path) -> None:
+    (tmp_path / "min-comp.gro").write_text("gro\n")
+    (tmp_path / "comp.top").write_text("top\n")
+    pipeline = MolecularDynamicsPipeline(output_dir=str(tmp_path))
+
+    assert pipeline._detect_stage(tmp_path, "comp", is_holo=False) == Stage.MINIMIZATION
+
+    (tmp_path / "min-comp-steep-mdrun.log").write_text("Converged to Fmax!\n")
+    (tmp_path / "min-comp-cg-mdrun.log").write_text("Converged to Fmax!\n")
+    assert pipeline._detect_stage(tmp_path, "comp", is_holo=False) == Stage.NVT
+
+    (tmp_path / "min-comp-cg-mdrun.log").write_text("did not converge to Fmax\n")
+    assert pipeline._detect_stage(tmp_path, "comp", is_holo=False) == Stage.MINIMIZATION
+
+
+def test_minimization_trjcat_uses_container_relative_paths(tmp_path: Path, monkeypatch) -> None:
+    pipeline = MolecularDynamicsPipeline(output_dir=str(tmp_path))
+    calls: list[list[str]] = []
+    cg_runs = 0
+
+    def _gmx(args: list[str], work: Path, stdin: str = "") -> int:
+        nonlocal cg_runs
+        calls.append(args)
+        if args[0] == "trjcat":
+            (work / args[args.index("-o") + 1]).write_bytes(b"joined")
+            return 0
+        if args[0] != "mdrun":
+            return 0
+        opts = {args[i]: args[i + 1] for i in range(len(args) - 1) if args[i].startswith("-")}
+        (work / f"{opts['-deffnm']}.trr").write_bytes(b"trajectory")
+        log_name = opts["-g"]
+        if "-cg-" in log_name:
+            cg_runs += 1
+        converged = not ("-cg-" in log_name and cg_runs == 1)
+        (work / log_name).write_text(
+            "Converged to Fmax!\n" if converged else "did not converge to Fmax\n"
+        )
+        return 0
+
+    monkeypatch.setattr(pipeline, "_gmx", _gmx)
+    pipeline._run_minimization("comp", tmp_path, is_holo=False)
+
+    trjcat_calls = [args for args in calls if args[0] == "trjcat"]
+    assert trjcat_calls, "expected the second CG iteration to concatenate trajectories"
+    assert trjcat_calls[0][2] == "min-comp-traj.trr"
+    assert trjcat_calls[0][3] == "min-comp.trr"
+    assert not any(arg.startswith("/") for arg in trjcat_calls[0])
