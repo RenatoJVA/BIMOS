@@ -15,8 +15,13 @@ const KIND_FILTERS: { label: string; value: JobKind | 'all'; match: (k: JobKind)
     match: (k) => k === 'predict' || k === 'predict-boltz',
   },
   { label: 'Docking', value: 'dock', match: (k) => k === 'dock' },
-  { label: 'MD', value: 'simulate', match: (k) => k === 'simulate' || k === 'simulate-holo' },
-  { label: 'QM', value: 'qm-orca', match: (k) => k === 'qm-orca' },
+  { label: 'Screen', value: 'screen', match: (k) => k === 'screen' },
+  {
+    label: 'MD',
+    value: 'simulate',
+    match: (k) => k === 'simulate' || k === 'simulate-holo' || k.startsWith('workflow-'),
+  },
+  { label: 'QM', value: 'qm-orca', match: (k) => k === 'qm-orca' || k === 'qm-g16' },
 ];
 
 const STATUS_FILTERS: { label: string; value: JobStatus | 'all' }[] = [

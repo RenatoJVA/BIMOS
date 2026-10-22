@@ -1,4 +1,4 @@
-import type { DockingHit, Job } from '../api/types';
+import type { DockingHit, Job, ScreenHit } from '../api/types';
 
 function readResults<T>(job: Job): T | null {
   if (!job.results) return null;
@@ -18,6 +18,37 @@ export function bestDockScore(job: Job): number | null {
   const hits = dockHits(job);
   if (hits.length === 0) return null;
   return Math.min(...hits.map((h) => h.best_score_kcal_mol));
+}
+
+export function screenHits(job: Job): ScreenHit[] {
+  const r = readResults<{
+    candidates?: unknown;
+    vina_scores?: unknown;
+    holo_dirs?: unknown;
+    hirsh_itps?: unknown;
+  }>(job);
+  if (!r || !Array.isArray(r.candidates)) return [];
+  return r.candidates
+    .filter((candidate): candidate is string => typeof candidate === 'string')
+    .map((candidate, i) => ({
+      candidate,
+      vina_score_kcal_mol:
+        Array.isArray(r.vina_scores) && typeof r.vina_scores[i] === 'number'
+          ? r.vina_scores[i]
+          : undefined,
+      holo_dir:
+        Array.isArray(r.holo_dirs) && typeof r.holo_dirs[i] === 'string'
+          ? r.holo_dirs[i]
+          : undefined,
+      hirsh_itp:
+        Array.isArray(r.hirsh_itps) && typeof r.hirsh_itps[i] === 'string'
+          ? r.hirsh_itps[i]
+          : undefined,
+    }));
+}
+
+export function screenReport(job: Job): string | undefined {
+  return readResults<{ report?: string }>(job)?.report;
 }
 
 export function predictConfidence(job: Job): number | undefined {
@@ -51,5 +82,9 @@ export function kindDisplay(kind: string): string {
     .replace('simulate-holo', 'md (holo)')
     .replace('simulate', 'md (apo)')
     .replace('qm-orca', 'qm orca')
+    .replace('qm-g16', 'qm gaussian')
+    .replace('workflow-holo-batch', 'md (holo batch)')
+    .replace('workflow-holo', 'md (holo)')
+    .replace('workflow-apo', 'md (apo)')
     .replace(/[-_]/g, ' ');
 }

@@ -154,7 +154,7 @@ function PredictForm({
         num_models: numModels,
         max_resources: maxResources,
       });
-      notify('success', `Prediction started (${job.id}) — Boltz-1 will run on GPU.`);
+      notify('success', `Prediction started (${job.id}) — Boltz-2 will run on GPU.`);
       onDone();
     } catch (err) {
       notify('error', `Prediction failed: ${(err as Error).message}`);
@@ -165,7 +165,7 @@ function PredictForm({
 
   return (
     <Panel
-      title="Boltz-1 Structure Prediction"
+      title="Boltz-2 Structure Prediction"
       description="Predict a 3D structure from a FASTA sequence. Runs on the GPU."
       onSubmit={submit}
       submitting={submitting}

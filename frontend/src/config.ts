@@ -15,7 +15,7 @@ export const FLOWS: FlowMeta[] = [
     key: 'predict',
     label: 'Structure Prediction',
     shortLabel: 'Predict',
-    description: 'Predict 3D structure from a FASTA sequence with Boltz-1.',
+    description: 'Predict 3D structure from a FASTA sequence with Boltz-2.',
     configKey: 'boltz',
     icon: 'structure',
   },
@@ -57,6 +57,11 @@ export const KIND_TO_FLOW: Record<JobKind, string> = {
   simulate: 'md',
   'simulate-holo': 'md',
   'qm-orca': 'qm',
+  'qm-g16': 'qm',
+  screen: 'dock',
+  'workflow-apo': 'md',
+  'workflow-holo': 'md',
+  'workflow-holo-batch': 'md',
 };
 
 export function flowMetaFor(kind: JobKind): FlowMeta {

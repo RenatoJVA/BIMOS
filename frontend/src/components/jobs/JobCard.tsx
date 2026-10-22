@@ -1,6 +1,6 @@
 import type { Job } from '../../api/types';
 import { formatDuration, formatTimestamp } from '../../utils/format';
-import { bestDockScore, dockHits, jobLabel } from '../../utils/results';
+import { bestDockScore, dockHits, jobLabel, kindDisplay } from '../../utils/results';
 import { StatusBadge } from '../ui/StatusBadge';
 
 interface JobCardProps {
@@ -31,7 +31,7 @@ export function JobCard({ job, onOpen }: JobCardProps) {
         <div className="flex flex-col gap-1.5 min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-mono text-[0.7rem] text-text-secondary uppercase tracking-wider">
-              {job.kind.replace(/[-_]/g, ' ')}
+              {kindDisplay(job.kind)}
             </span>
             {job.meta.max_resources && (
               <span className="text-[0.6rem] font-mono uppercase tracking-wide text-accent border border-accent/40 rounded px-1.5 py-px">

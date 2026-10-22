@@ -1,6 +1,17 @@
 export type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'canceled';
 
-export type JobKind = 'predict' | 'predict-boltz' | 'dock' | 'simulate' | 'simulate-holo' | 'qm-orca';
+export type JobKind =
+  | 'predict'
+  | 'predict-boltz'
+  | 'dock'
+  | 'simulate'
+  | 'simulate-holo'
+  | 'qm-orca'
+  | 'qm-g16'
+  | 'screen'
+  | 'workflow-apo'
+  | 'workflow-holo'
+  | 'workflow-holo-batch';
 
 export interface DockingHit {
   complex: string;
@@ -51,7 +62,34 @@ export interface MdResults {
   output_dir?: string;
 }
 
-export type JobResults = PredictResults | DockResults | QmResults | MdResults | null;
+export interface ScreenHit {
+  candidate: string;
+  vina_score_kcal_mol?: number;
+  holo_dir?: string;
+  hirsh_itp?: string;
+}
+
+export interface ScreenResults {
+  status?: string;
+  output_dir?: string;
+  candidate?: string;
+  vina_score_kcal_mol?: number;
+  holo_dir?: string;
+  hirsh_itp?: string;
+  candidates?: string[];
+  vina_scores?: number[];
+  holo_dirs?: string[];
+  hirsh_itps?: string[];
+  report?: string;
+}
+
+export type JobResults =
+  | PredictResults
+  | DockResults
+  | QmResults
+  | MdResults
+  | ScreenResults
+  | null;
 
 export interface SystemStats {
   cpu: number;
