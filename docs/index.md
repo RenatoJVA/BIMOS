@@ -14,9 +14,11 @@ BIMOS integrates molecular docking, protein structure prediction, molecular dyna
 - **Quantum Chemistry** — ORCA and Gaussian Hirshfeld charge pipelines
 - **Desktop GUI** — Cross-platform native interface (pywebview + React)
 - **REST API** — FastAPI-based HTTP interface
-- **Container-native** — All compute tools run inside containers
+- **Containerized compute** — Boltz, Vina and GROMACS run in a Podman/Docker image; ORCA/G16 run on the licensed host
 
 ## Quick Start
+
+See [Installation](installation.md) and [Deployment](deployment.md) for installers, GPU requirements and remote access.
 
 ```bash
 pip install bimos
@@ -28,5 +30,5 @@ bimos predict sequence.fasta
 bimos dock receptor.pdb ligands.sdf
 
 # Start the desktop GUI
-bimos --gui
+bimos -g
 ```

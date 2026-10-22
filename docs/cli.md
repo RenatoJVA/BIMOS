@@ -197,7 +197,9 @@ bimos jobs kill <job-id>      # Cancel a job
 
 ### `bimos db`
 
-Manage the BIMOS ligand database.
+Manage the BIMOS ligand database. Set `BIMOS_DATABASE_URL` first (PostgreSQL,
+for example `postgresql+psycopg://bimos:<password>@localhost/bimos`); the
+packaged template intentionally ships it unset.
 
 ```bash
 bimos db init                 # Initialize PostgreSQL schema
