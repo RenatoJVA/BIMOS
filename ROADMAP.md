@@ -6,7 +6,9 @@
 ejecución en [`PLAN.md`](./PLAN.md). Ningún frente de R-ROAD-01/R-ROAD-02 se retoma
 hasta cerrar los P0 de este bloque.
 
-Base validada: `7a5bbda` (lint OK; suite 463 passed, 2 skipped). Alcance:
+Base validada: `7a5bbda` (lint OK; suite 463 passed, 2 skipped). Estado actual:
+P0/P1/P2 cerrados en local (suite 520 passed) y CI/CD preparado pero **sin
+activar** (solo `workflow_dispatch`) por costo/límite de GitHub Actions. Alcance:
 
 - P0 build/release: imagen API construible, `fpm` en CI, compose sin socket.
 - P0 recursos: `--max`, `--jobs` y `cpu_per_job` propagados de verdad.
