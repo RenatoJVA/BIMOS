@@ -102,10 +102,16 @@ The version is defined once in `backend/pyproject.toml`; the API, CLI and
 frontend read it from there.
 
 ```bash
-pixi run python builder.py            # frontend + Nuitka + installer
-pixi run python builder.py --skip-nuitka
-pixi run python builder.py --verify   # audit existing artifacts only
+cd backend
+pixi run python ../builder.py            # frontend + Nuitka + installer
+pixi run python ../builder.py --skip-nuitka
+pixi run python ../builder.py --verify   # audit existing artifacts only
 ```
+
+CI/CD is prepared but intentionally **not activated**: the workflow only runs
+via `workflow_dispatch` because hosted-runner minutes are budget-limited. When
+activated, a tag must be exactly `v` + the `pyproject.toml` version (for example
+`v0.1.0`); the workflow enforces that before packaging.
 
 `builder.py --verify` checks the binary smoke test (`bimos --version`), stripped
 debug symbols, the bundled NSS chain and the `.deb` payload (binary, wrapper,
