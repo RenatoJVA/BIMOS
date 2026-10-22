@@ -356,10 +356,22 @@ def preflight() -> bool:
 
 # ── Main ──────────────────────────────────────────────────────────────────
 
+USAGE = """Usage: python test.py [--only=name[,name...]]
+
+Runs all seven BIMOS integration pipelines. --only filters by a substring of
+the pipeline label (e.g. --only=apo,boltz)."""
+
+
 def main():
-    for a in sys.argv[1:]:
-        if a.startswith("--only="):
-            ONLY.update(x.strip().lower() for x in a.split("=", 1)[1].split(",") if x.strip())
+    for arg in sys.argv[1:]:
+        if arg in ("-h", "--help"):
+            print(USAGE)
+            return
+        if arg.startswith("--only="):
+            ONLY.update(x.strip().lower() for x in arg.split("=", 1)[1].split(",") if x.strip())
+        else:
+            print(f"Unknown argument: {arg}\n\n{USAGE}", file=sys.stderr)
+            raise SystemExit(2)
     if ONLY:
         print(f"  [INFO] --only filter: {sorted(ONLY)}")
     print("=" * 70)
