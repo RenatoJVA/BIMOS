@@ -86,6 +86,7 @@ class DockingPipeline(Pipeline):
             volumes={str(work_dir): "/work", str(SCRIPTS_DIR): "/scripts"},
             workdir="/work",
             on_output=self.on_output,
+            read_only={"/scripts"},
         )
 
     @staticmethod
@@ -404,7 +405,7 @@ def run_docking_pipeline(**kwargs: Any) -> dict[str, Any]:
     """Run the docking pipeline with explicit keyword arguments."""
     output_dir = kwargs.pop("output_dir", None)
     on_output = kwargs.pop("on_output", None)
-    max_mode = kwargs.pop("max_resources", False)
+    max_mode = kwargs.pop("max_resources", None)
     protein_pdb = kwargs.pop("protein_pdb")
     ligands_sdf = kwargs.pop("ligands_sdf")
     pipeline = DockingPipeline(

@@ -343,7 +343,7 @@ class BoltzPipeline(Pipeline):
 def predict_boltz(**kwargs: Any) -> dict[str, Any]:
     output_dir = kwargs.pop("output_dir", None)
     on_output = kwargs.pop("on_output", None)
-    max_mode = kwargs.pop("max_resources", False)
+    max_mode = kwargs.pop("max_resources", None)
     return BoltzPipeline(output_dir=output_dir, on_output=on_output).run(
         max_mode=max_mode,
         **kwargs,

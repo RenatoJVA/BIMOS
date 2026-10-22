@@ -85,8 +85,12 @@ class MolecularDynamicsPipeline(Pipeline):
         if not (cwd / f"min-{comp}.gro").exists() or not (cwd / f"{comp}.top").exists():
             return Stage.PREP
 
-        if self._log_contains(cwd, f"min-cg-{comp}.log", "did not converge to Fmax"):
-            return Stage.MINIMIZATION
+        for label in ("steep", "cg"):
+            log_name = f"min-{comp}-{label}-mdrun.log"
+            if not (cwd / log_name).exists() or self._log_contains(
+                cwd, log_name, "did not converge to Fmax"
+            ):
+                return Stage.MINIMIZATION
 
         for phase in ["nvt", "npt", "sdm"]:
             if not (cwd / f"{phase}-{comp}.gro").exists() or not self._log_contains(cwd, f"{phase}-{comp}.log", "Finished mdrun"):
@@ -156,25 +160,45 @@ class MolecularDynamicsPipeline(Pipeline):
                 g_args = ["grompp", "-f", mdp, "-c", f"{tag}.gro", "-r", f"{tag}.gro", "-p", f"{comp}.top", "-o", f"{tag}.tpr", "-maxwarn", "3"]
                 if idx:
                     g_args += ["-n", idx]
-                self._gmx(g_args, cwd)
+                rc = self._gmx(g_args, cwd)
+                if rc != 0:
+                    raise RuntimeError(f"grompp failed for {label} minimization of {comp} (exit {rc}).")
 
-                m_args = ["mdrun", "-deffnm", tag, "-v", "-pin", "on", "-pinoffset", "0", "-nice", "0", *self._get_parallel_args()]
-                self._gmx(m_args, cwd)
+                m_args = ["mdrun", "-deffnm", tag, "-g", log_f, "-v", "-pin", "on", "-pinoffset", "0", "-nice", "0", *self._get_parallel_args()]
+                rc = self._gmx(m_args, cwd)
+                if rc != 0:
+                    raise RuntimeError(f"mdrun failed for {label} minimization of {comp} (exit {rc}).")
 
                 new_trr = cwd / f"{tag}.trr"
-                if n == 0:
-                    if new_trr.exists():
+                if new_trr.exists():
+                    if not traj_file.exists():
                         new_trr.rename(traj_file)
-                elif new_trr.exists() and traj_file.exists():
-                    temp = cwd / "temp_traj.trr"
-                    self._gmx(["trjcat", "-f", str(traj_file), str(new_trr), "-o", str(temp), "-cat"], cwd)
-                    temp.rename(traj_file)
-                    new_trr.unlink(missing_ok=True)
+                    else:
+                        temp = cwd / "temp_traj.trr"
+                        rc = self._gmx(
+                            [
+                                "trjcat", "-f", traj_file.name, new_trr.name,
+                                "-o", temp.name, "-cat",
+                            ],
+                            cwd,
+                        )
+                        if rc != 0:
+                            raise RuntimeError(f"trjcat failed while minimizing {comp} (exit {rc}).")
+                        temp.rename(traj_file)
+                        new_trr.unlink(missing_ok=True)
 
                 for bak in cwd.glob(f"*#*{tag}*"):
                     bak.unlink(missing_ok=True)
+                if not (cwd / log_f).exists():
+                    raise RuntimeError(f"mdrun produced no minimization log: {log_f}")
                 converged = not self._log_contains(cwd, log_f, "did not converge to Fmax")
                 n += 1
+
+            if not converged:
+                raise RuntimeError(
+                    f"{label} minimization of {comp} did not converge after "
+                    f"{self.md_config.max_min_iterations} iterations."
+                )
 
     def _run_sim_phase(self, phase: str, prev: str, comp: str, cwd: Path, is_holo: bool) -> None:
         tag, p_tag, prefix = f"{phase}-{comp}", f"{prev}-{comp}", "holo" if is_holo else "apo"
@@ -462,7 +486,7 @@ class MolecularDynamicsPipeline(Pipeline):
 def run_md_simulation(**kwargs: Any) -> dict[str, Any] | list[dict[str, Any]]:
     output_dir = kwargs.pop("output_dir", None)
     on_output = kwargs.pop("on_output", None)
-    max_mode = kwargs.pop("max_resources", False)
+    max_mode = kwargs.pop("max_resources", None)
     pipeline = MolecularDynamicsPipeline(
         output_dir=output_dir,
         on_output=on_output,

@@ -111,16 +111,21 @@ def _max_patch(name: str, data: dict[str, Any]) -> dict[str, Any]:
         # The MAX profile raises the per-job footprint from 32 GB to 64 GB.
         # That must still fit the default parallelism (2 jobs) inside the
         # host's physical RAM, otherwise the hardware guard can only block
-        # every MAX run. On smaller hosts, keep the safe 32 GB per job.
+        # every MAX run. On smaller hosts, keep the safe 32 GB per job and
+        # cap parallelism to what actually fits the installed RAM.
         default_parallel = 2
         mem_per_job_gb = 64.0
         headroom_jobs = default_parallel
         if mem is not None:
             headroom_jobs = max(1, int(mem.total_gb // mem_per_job_gb))
+            if headroom_jobs < default_parallel:
+                mem_per_job_gb = 32.0
+                headroom_jobs = max(1, int(mem.total_gb // mem_per_job_gb))
+            max_jobs = min(max_jobs, headroom_jobs)
         if name == "orca":
-            block["maxcore_mb"] = 64000 if headroom_jobs >= default_parallel else 32000
+            block["maxcore_mb"] = int(mem_per_job_gb * 1024)
         else:
-            block["mem"] = "64GB" if headroom_jobs >= default_parallel else "32GB"
+            block["mem"] = f"{int(mem_per_job_gb)}GB"
         block["max_jobs"] = max_jobs
 
     return patched
@@ -140,9 +145,12 @@ def resolve(
     ensure_user_configs()
     packaged = _packaged_default_yaml(name)
     user = _load_yaml(_user_path(name))
+    custom = bool(user) and bool(packaged) and _canonical(user) != _canonical(packaged)
 
-    if is_custom(name):
-        data = user
+    if custom:
+        # Deep-merge over the packaged defaults so a user file created by an
+        # older release still receives newly added keys after an upgrade.
+        data = _deep_merge(packaged, user)
         profile = ConfigProfile.CUSTOM
     else:
         data = copy.deepcopy(packaged) or {}

@@ -8,6 +8,7 @@ Works with rootless Podman (no daemon socket required).
 import contextlib
 import logging
 import os
+import platform
 import subprocess
 import threading
 import time
@@ -19,6 +20,28 @@ from bimos.infrastructure import cancellation
 from bimos.infrastructure.job_store import current_job_id
 
 logger = logging.getLogger("bimos.container")
+
+# Public sentinels: callers can distinguish a user cancellation from a timeout
+# or a missing runtime instead of treating every non-zero exit as the same.
+CANCELED_RC = -3
+TIMED_OUT_RC = -1
+RUNTIME_MISSING_RC = -2
+
+
+class ContainerError(RuntimeError):
+    """Base class for explicit container runner failures."""
+
+
+class ContainerTimeoutError(ContainerError):
+    """The container exceeded its configured timeout and was killed."""
+
+
+class ContainerCanceledError(ContainerError):
+    """The job was canceled by the user while the container was running."""
+
+
+class ContainerRuntimeNotFoundError(ContainerError):
+    """Podman/Docker was not found in PATH."""
 
 
 def _detect_runtime() -> str:
@@ -38,6 +61,22 @@ def _get_proc_env() -> dict[str, str]:
     return proc_env
 
 
+def _container_library_path(machine: str | None = None) -> str:
+    """Library search path for the container architecture.
+
+    CUDA/NVIDIA paths are harmless for CPU-only jobs and are included so a
+    GPU-enabled image works without rebuilding the argument list.
+    """
+    arch = (machine or platform.machine()).lower()
+    if arch in {"aarch64", "arm64"}:
+        system_libs = "/lib/aarch64-linux-gnu:/usr/lib/aarch64-linux-gnu"
+    elif arch in {"x86_64", "amd64"}:
+        system_libs = "/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu"
+    else:
+        system_libs = "/lib:/usr/lib:/usr/local/lib"
+    return f"{system_libs}:/usr/local/nvidia/lib64:/usr/local/cuda/lib64"
+
+
 def run(
     command: list[str],
     image: str = "",
@@ -47,6 +86,8 @@ def run(
     env: dict[str, str] | None = None,
     stdin_text: str | None = None,
     timeout: int = 7200,
+    read_only: set[str] | None = None,
+    raise_on_error: bool = False,
 ) -> int:
     """
     Run a command inside a container (or a raw subprocess if image is empty).
@@ -60,22 +101,25 @@ def run(
         on_output: Callback called with each output line.
         env: Additional environment variables.
         timeout: Max execution time in seconds.
+        read_only: Container paths whose bind mounts must be mounted ``ro``.
+        raise_on_error: Raise a :class:`ContainerError` for timeout, cancel or a
+            missing runtime instead of returning the numeric sentinel.
 
     Returns:
-        Exit code.
+        Exit code, or one of ``CANCELED_RC``/``TIMED_OUT_RC``/
+        ``RUNTIME_MISSING_RC``.
     """
-    runtime = _detect_runtime()
+    runtime = _detect_runtime() if image else ""
 
     if image:
-        full_cmd = [runtime, "run", "-i" ,"--rm", "--workdir", workdir]
+        full_cmd = [runtime, "run", "-i", "--rm", "--workdir", workdir]
 
         # Thread limiting (default 1/3 available)
         t = settings.get_threads()
         full_cmd += ["-e", f"OMP_NUM_THREADS={t}", "-e", f"MKL_NUM_THREADS={t}"]
+        full_cmd += ["-e", f"LD_LIBRARY_PATH={_container_library_path()}"]
 
         if settings.use_gpu:
-            ld_path = "/lib/x86_64-linux-gnu:/usr/local/nvidia/lib64:/usr/local/cuda/lib64"
-            full_cmd += ["-e", f"LD_LIBRARY_PATH={ld_path}"]
             if runtime == "docker":
                 full_cmd += ["--gpus", "all"]
             elif runtime == "podman":
@@ -94,8 +138,10 @@ def run(
         full_cmd += ["--security-opt=no-new-privileges"]
 
         if volumes:
+            read_only = read_only or set()
             for host_path, container_path in volumes.items():
-                full_cmd += ["-v", f"{Path(host_path).resolve()}:{container_path}:Z"]
+                mode = "ro,Z" if container_path in read_only else "Z"
+                full_cmd += ["-v", f"{Path(host_path).resolve()}:{container_path}:{mode}"]
 
         if env:
             for k, v in env.items():
@@ -158,30 +204,45 @@ def run(
 
         reader.join(timeout=10)
 
-        if rc == _CANCELED_RC:
+        if rc == CANCELED_RC:
             msg = f"[BIMOS] Job {current_job_id.get() or ''} was canceled by user."
             logger.info(msg)
             if on_output:
                 on_output(msg)
+            if raise_on_error:
+                raise ContainerCanceledError(msg)
+            return rc
+
+        if rc == TIMED_OUT_RC:
+            msg = f"[BIMOS] Container timed out after {timeout}s (command: {' '.join(command)})."
+            logger.error(msg)
+            if on_output:
+                on_output(msg)
+            if raise_on_error:
+                raise ContainerTimeoutError(msg)
             return rc
 
         return rc
 
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
         process.kill()
         process.wait()
-        msg = f"[BIMOS] Container timed out after {timeout}s"
+        msg = f"[BIMOS] Container timed out after {timeout}s (command: {' '.join(command)})."
         logger.error(msg)
         if on_output:
             on_output(msg)
-        return -1
+        if raise_on_error:
+            raise ContainerTimeoutError(msg) from exc
+        return TIMED_OUT_RC
 
-    except FileNotFoundError:
-        msg = f"[BIMOS] Runtime '{runtime}' not found. Install Podman or Docker."
+    except FileNotFoundError as exc:
+        msg = f"[BIMOS] Runtime '{runtime or 'container runtime'}' not found. Install Podman or Docker."
         logger.error(msg)
         if on_output:
             on_output(msg)
-        return -2
+        if raise_on_error:
+            raise ContainerRuntimeNotFoundError(msg) from exc
+        return RUNTIME_MISSING_RC
 
 
 def image_exists(image: str) -> bool:
@@ -207,9 +268,9 @@ def build_image(dockerfile: str, tag: str, context: str = ".", on_output: Callab
     return run(command=cmd, on_output=on_output)
 
 
-# Sentinels returned by _wait_for.
-_CANCELED_RC = -3
-_TIMED_OUT_RC = -1
+# Internal aliases kept for readability.
+_CANCELED_RC = CANCELED_RC
+_TIMED_OUT_RC = TIMED_OUT_RC
 
 
 def _wait_for(process: subprocess.Popen, *, timeout: int, job_id: str) -> int:

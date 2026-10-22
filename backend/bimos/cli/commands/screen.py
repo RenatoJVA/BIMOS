@@ -68,7 +68,7 @@ and skipped; the cascade aborts only if every hit fails.
     help="QM backend for charge refinement.",
 )
 @click.option("--charge", "-q", default=0, help="Integer net charge of the selected ligands.")
-@click.option("--jobs", "-j", default=2, help="Max parallel QM calculations.")
+@click.option("--jobs", "-j", type=click.IntRange(min=1), default=None, help="Max parallel QM calculations (defaults to the YAML/MAX profile).")
 @click.option(
     "--top-n",
     "top_n",
@@ -100,6 +100,7 @@ and skipped; the cascade aborts only if every hit fails.
 )
 @click.option("--padding", type=float, default=None, help="Padding for reference/pocket-derived boxes.")
 @click.option("--times", type=int, default=None, help="Vina repetitions per ligand.")
+@click.option("--cpu-per-job", "cpu_per_job", type=click.IntRange(min=1), default=None, help="Vina CPU threads per ligand (defaults to config/--max).")
 @click.option("--background", "-b", is_flag=True, help="Run in background thread.")
 @click.option("--gui", "-g", is_flag=True, help="Open the GUI dashboard for monitoring.")
 @force_option
@@ -112,7 +113,7 @@ def screen(
     output: str | None,
     qm_backend: str,
     charge: int,
-    jobs: int,
+    jobs: int | None,
     top_n: int,
     min_score: float | None,
     center: tuple[float, float, float] | None,
@@ -121,6 +122,7 @@ def screen(
     pocket_residues: str | None,
     padding: float | None,
     times: int | None,
+    cpu_per_job: int | None,
     background: bool,
     gui: bool,
     force: bool,
@@ -150,11 +152,12 @@ def screen(
         ("pocket_residues", pocket_residues),
         ("padding", padding),
         ("times", times),
+        ("cpu_per_job", cpu_per_job),
     ):
         if value is not None:
             kwargs[key] = value
 
-    from bimos.cli.commands.qm import _qm_memory_gb
+    from bimos.cli.commands.qm import _effective_qm_jobs, _qm_memory_gb
     from bimos.shared.user_config import resolve
 
     # The QM stage runs with the selected backend, so assess that one: ORCA and
@@ -172,7 +175,7 @@ def screen(
         "screen",
         hardware.assess_screen(
             _qm_memory_gb(qm_config_name),
-            jobs,
+            _effective_qm_jobs(qm_config_name, jobs),
             docking_config=docking_config,
         ),
         force=force,

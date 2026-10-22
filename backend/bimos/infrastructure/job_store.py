@@ -109,7 +109,7 @@ class FileJobStore:
     def complete(self, job_id: str, exit_code: int = 0, results: Any = None) -> None:
         with self._lock:
             job = self._load(job_id)
-            if job is None:
+            if job is None or job.status == JobStatus.CANCELED:
                 return
             job.status = JobStatus.COMPLETED if exit_code == 0 else JobStatus.FAILED
             job.finished_at = datetime.now(UTC).isoformat()
@@ -123,7 +123,7 @@ class FileJobStore:
     def fail(self, job_id: str, error: str) -> None:
         with self._lock:
             job = self._load(job_id)
-            if job is None:
+            if job is None or job.status == JobStatus.CANCELED:
                 return
             job.status = JobStatus.FAILED
             job.finished_at = datetime.now(UTC).isoformat()
@@ -203,6 +203,25 @@ class FileJobStore:
         self.flush(job_id)
         return self._tail_lines_fast(self._log_path(job_id), n)
 
+    def read_log_chunk(self, job_id: str, offset: int = 0) -> tuple[str, int]:
+        """Return text from *offset* to EOF and the new byte offset.
+
+        The job log is flushed first so SSE consumers never miss buffered lines.
+        If the file was truncated, reading restarts from zero.
+        """
+        self.flush(job_id)
+        path = self._log_path(job_id)
+        try:
+            size = path.stat().st_size
+            if offset > size:
+                offset = 0
+            with open(path, "rb") as f:
+                f.seek(offset)
+                data = f.read()
+        except OSError:
+            return "", offset
+        return data.decode("utf-8", errors="replace"), offset + len(data)
+
     def list_all(self) -> list[JobRecord]:
         self._maybe_invalidate_list_cache()
         if self._list_cache is not None:
@@ -231,7 +250,7 @@ class FileJobStore:
     def cancel(self, job_id: str) -> bool:
         with self._lock:
             job = self._load(job_id)
-            if not job:
+            if job is None or job.status not in (JobStatus.PENDING, JobStatus.RUNNING):
                 return False
             job.status = JobStatus.CANCELED
             job.finished_at = datetime.now(UTC).isoformat()

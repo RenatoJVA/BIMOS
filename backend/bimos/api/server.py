@@ -15,10 +15,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from bimos.api.routes import router
+from bimos.api.security import ensure_safe_binding, is_loopback
+from bimos.config.settings import initialize, settings
 
 app = FastAPI(
     title="BIMOS API",
-    version="0.1.0",
+    version=settings.app_version,
     description="Biomolecular Modeling Suite — Backend API.",
 )
 
@@ -57,7 +59,7 @@ else:
 
     @app.get("/")
     async def root():  # type: ignore[no-untyped-def]
-        return {"name": "BIMOS", "version": "0.1.0", "docs": "/docs", "ui": "Not compiled"}
+        return {"name": "BIMOS", "version": settings.app_version, "docs": "/docs", "ui": "Not compiled"}
 
 
 def _detect_system_dark_mode() -> bool:
@@ -186,6 +188,8 @@ def start_server(
     If remote_url is provided, the local server is NOT started, and the UI
     connects directly to the remote instance.
     """
+    initialize(announce=False)
+
     if remote_url:
         if not _is_reachable(remote_url):
             print(f"\n\033[1;31mError:\033[0m Remote server {remote_url} is unreachable.")
@@ -195,14 +199,14 @@ def start_server(
             sys.exit(1)
         target_url = remote_url
     else:
-        if host not in {"127.0.0.1", "localhost", "::1"}:
-            # H-04: BIMOS has no API authentication yet, so a non-loopback
-            # binding is an explicit exposure decision, not a silent default.
+        # Fail closed: exposing the API outside loopback without a bearer token
+        # is never a silent default.
+        ensure_safe_binding(host)
+        if not is_loopback(host):
             print(
-                "\n\033[1;33mWarning:\033[0m "
-                f"BIMOS is binding to non-loopback host {host!r}. "
-                "The API has no authentication; expose it only behind a trusted "
-                "network, VPN, or reverse proxy with access control."
+                "\n\033[1;32mInfo:\033[0m "
+                f"BIMOS is binding to non-loopback host {host!r} with "
+                "BIMOS_API_TOKEN authentication enabled."
             )
         if not desktop:
             _run_server(host, port)

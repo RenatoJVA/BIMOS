@@ -36,10 +36,11 @@ DOCK_EPILOG = """Examples:
 @click.option("--times", type=int, default=None, help="Vina repetitions per ligand.")
 @click.option("--exhaustiveness", type=int, default=None, help="Vina exhaustiveness.")
 @click.option("--num-modes", "num_modes", type=int, default=None, help="Vina num_modes.")
+@click.option("--cpu-per-job", "cpu_per_job", type=click.IntRange(min=1), default=None, help="Vina CPU threads per ligand (defaults to config/--max).")
 @click.option("--background", "-b", is_flag=True, help="Run in background thread.")
 @click.option("--gui", "-g", is_flag=True, help="Open the GUI dashboard for monitoring.")
 @force_option
-def dock(protein_pdb: str, ligands_input: str, dataset: bool, output: str | None, center: tuple[float, float, float] | None, size: tuple[float, float, float] | None, center_on: str | None, pocket_residues: str | None, padding: float | None, times: int | None, exhaustiveness: int | None, num_modes: int | None, background: bool, gui: bool, force: bool) -> None:
+def dock(protein_pdb: str, ligands_input: str, dataset: bool, output: str | None, center: tuple[float, float, float] | None, size: tuple[float, float, float] | None, center_on: str | None, pocket_residues: str | None, padding: float | None, times: int | None, exhaustiveness: int | None, num_modes: int | None, cpu_per_job: int | None, background: bool, gui: bool, force: bool) -> None:
     """Run molecular docking pipeline (Protein PDB + Ligands SDF/Dataset -> best poses)."""
     from bimos.docking import run_docking_pipeline
     from bimos.infrastructure.chembl_db import export_to_sdf, get_available_datasets
@@ -70,7 +71,7 @@ def dock(protein_pdb: str, ligands_input: str, dataset: bool, output: str | None
     hardware.guard("dock", hardware.assess_dock(docking_config), force=force)
 
     validated_output = validate_output(output, [protein_pdb, ligands_sdf])
-    kwargs = _pipeline_kwargs(center, size, center_on, pocket_residues, padding, times, exhaustiveness, num_modes)
+    kwargs = _pipeline_kwargs(center, size, center_on, pocket_residues, padding, times, exhaustiveness, num_modes, cpu_per_job)
 
     def _run(emit: Any) -> Any:
         return run_docking_pipeline(
@@ -97,13 +98,14 @@ def dock(protein_pdb: str, ligands_input: str, dataset: bool, output: str | None
     )
 
 
-def _pipeline_kwargs(center: tuple[float, float, float] | None, size: tuple[float, float, float] | None, center_on: str | None, pocket_residues: str | None, padding: float | None, times: int | None, exhaustiveness: int | None, num_modes: int | None) -> dict[str, object]:
+def _pipeline_kwargs(center: tuple[float, float, float] | None, size: tuple[float, float, float] | None, center_on: str | None, pocket_residues: str | None, padding: float | None, times: int | None, exhaustiveness: int | None, num_modes: int | None, cpu_per_job: int | None) -> dict[str, object]:
     """Collect non-None CLI options into pipeline kwargs."""
     kwargs: dict[str, object] = {}
     for key, value in (
         ("center", center), ("size", size), ("center_on", center_on),
         ("pocket_residues", pocket_residues), ("padding", padding),
         ("times", times), ("exhaustiveness", exhaustiveness), ("num_modes", num_modes),
+        ("cpu_per_job", cpu_per_job),
     ):
         if value is not None:
             kwargs[key] = value

@@ -24,6 +24,13 @@ from bimos.config.settings import settings
 
 logger = logging.getLogger("bimos.database")
 
+if not settings.database_url.strip():
+    raise RuntimeError(
+        "BIMOS_DATABASE_URL is not configured. Set it in ~/.bimos/.env before "
+        "using the ligand database, e.g. "
+        "postgresql+psycopg://bimos:<credential>@localhost/bimos"
+    )
+
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,

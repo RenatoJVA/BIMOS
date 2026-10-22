@@ -24,7 +24,7 @@ class OrcaConfig:
     profile: str = "default"
 
     @classmethod
-    def resolve(cls, *, max_mode: bool | None = None, charge: int | None = None) -> OrcaConfig:
+    def resolve(cls, *, max_mode: bool | None = None, charge: int | None = None, max_jobs: int | None = None) -> OrcaConfig:
         data, profile = resolve("orca", max_mode=max_mode)
         block = data.get("orca", {})
         job = data.get("job", {})
@@ -33,7 +33,7 @@ class OrcaConfig:
             basis=str(block.get("basis", "def2-TZVP")),
             maxcore_mb=int(clamp(int(block.get("maxcore_mb", 32000)), 512, 128000)),
             max_iter=int(clamp(int(block.get("max_iter", 512)), 50, 2000)),
-            max_jobs=int(clamp(int(block.get("max_jobs", 2)), 1, 32)),
+            max_jobs=int(clamp(int(max_jobs if max_jobs is not None else block.get("max_jobs", 2)), 1, 32)),
             charge=int(charge if charge is not None else job.get("charge", 0)),
             profile=profile.value,
         )
@@ -49,14 +49,14 @@ class GaussianConfig:
     profile: str = "default"
 
     @classmethod
-    def resolve(cls, *, max_mode: bool | None = None, charge: int | None = None) -> GaussianConfig:
+    def resolve(cls, *, max_mode: bool | None = None, charge: int | None = None, max_jobs: int | None = None) -> GaussianConfig:
         data, profile = resolve("gaussian", max_mode=max_mode)
         block = data.get("gaussian", {})
         job = data.get("job", {})
         return cls(
             route=str(block.get("route", "cam-b3lyp tzvp pop=hirshfeld scf=(xqc,maxcycle=512)")),
             mem=str(block.get("mem", "32GB")),
-            max_jobs=int(clamp(int(block.get("max_jobs", 2)), 1, 32)),
+            max_jobs=int(clamp(int(max_jobs if max_jobs is not None else block.get("max_jobs", 2)), 1, 32)),
             charge=int(charge if charge is not None else job.get("charge", 0)),
             profile=profile.value,
         )

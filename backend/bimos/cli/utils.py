@@ -114,30 +114,51 @@ def run_tracked(
     Creates the job, streams logs via *run_fn(emit)*, and handles the
     foreground/background/GUI branches identically for every command.
     """
+    from bimos.infrastructure import cancellation
     from bimos.infrastructure.job_store import store
 
     job = store.create(kind=kind, meta=meta, output_dir=output or "")
     click.echo(f"Job ID: {job.id}")
 
-    def _run() -> None:
+    def _run() -> int:
+        cancellation.register(job.id)
         store.start(job.id)
+        foreground = not background and not gui
+        if _job_is_canceled(job.id, store):
+            if foreground:
+                click.echo("Canceled.", err=True)
+            return 1
 
         def emit(line: str) -> None:
             store.log(job.id, line)
-            if not background and not gui:
+            if foreground:
                 click.echo(line)
 
         try:
             result = run_fn(emit)
+            if _job_is_canceled(job.id, store):
+                store.cancel(job.id)
+                if foreground:
+                    click.echo("Canceled.", err=True)
+                return 1
             store.complete(job.id, exit_code=0)
-            if not background and not gui:
+            if foreground:
                 if get_output_format() != "text":
                     output_result(result)
                 else:
                     summarize(result)
+            return 0
         except Exception as exc:
+            if _job_is_canceled(job.id, store):
+                store.cancel(job.id)
+                if foreground:
+                    click.echo("Canceled.", err=True)
+                return 1
             store.fail(job.id, str(exc))
             click.echo(f"Error: {exc}", err=True)
+            return 1
+        finally:
+            cancellation.unregister(job.id)
 
     if gui:
         threading.Thread(target=_run, daemon=True).start()
@@ -149,7 +170,19 @@ def run_tracked(
         click.echo("Running in background. Use 'bimos jobs' to check status.")
         daemonize(_run)
     else:
-        _run()
+        exit_code = _run()
+        if exit_code:
+            raise click.exceptions.Exit(exit_code)
+
+
+def _job_is_canceled(job_id: str, job_store: Any) -> bool:
+    """Check the in-memory cancellation event and the persisted job status."""
+    from bimos.infrastructure import cancellation
+
+    if cancellation.is_canceled(job_id):
+        return True
+    job = job_store.get(job_id)
+    return job is not None and job.status == "canceled"
 
 
 def daemonize(target: Callable[[], None]) -> None:
