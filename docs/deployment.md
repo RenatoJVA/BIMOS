@@ -109,9 +109,18 @@ pixi run python ../builder.py --verify   # audit existing artifacts only
 ```
 
 CI/CD is prepared but intentionally **not activated**: the workflow only runs
-via `workflow_dispatch` because hosted-runner minutes are budget-limited. When
-activated, a tag must be exactly `v` + the `pyproject.toml` version (for example
-`v0.1.0`); the workflow enforces that before packaging.
+via `workflow_dispatch` because hosted-runner minutes are budget-limited. Do not
+activate or run it until the release gate is approved:
+
+- Feature freeze at roughly 95% of the release scope.
+- Version and tag agreed; the tag must be exactly `v` + the
+  `pyproject.toml` version (for example `v0.1.0`).
+- Local gates green: lint, test suite, frontend build, full integration run,
+  `builder.py`/`--verify`, and the API image smoke test.
+
+Then run **one** Linux build, download the artifact and repeat `--verify` on the
+downloaded `.deb`. Windows/macOS builds remain out of scope until `R-ROAD-01`
+is explicitly approved.
 
 `builder.py --verify` checks the binary smoke test (`bimos --version`), stripped
 debug symbols, the bundled NSS chain and the `.deb` payload (binary, wrapper,
