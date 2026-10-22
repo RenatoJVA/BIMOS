@@ -1,7 +1,8 @@
 # PLAN — Estabilización post-auditoría
 
 **Base:** `7a5bbda` (2026-10-21). **Rama:** `refactor/backend_V2`.
-**Regla:** no se retoma `R-ROAD-01`/`R-ROAD-02` hasta cerrar los P0.
+**Regla:** `R-ROAD-01`/`R-ROAD-02` siguen postergados por decisión del operador;
+no se inician hasta autorización explícita.
 
 ## Arquitectura de ejecución (decisión)
 
@@ -24,7 +25,7 @@
 | ID | Objetivo | Cambios | Test / aceptación | Estado |
 |---|---|---|---|---|
 | P0-01 | Imagen API construible | `backend/Dockerfile` copia `bimos/`; `.dockerignore` actualizado | Test estático del Dockerfile + `docker build -f backend/Dockerfile backend` | Hecho: build real con `podman` + smoke API (health 200, auth 401/200) |
-| P0-02 | CI de release con `fpm` | `.github/workflows/build.yml` instala Ruby/fpm y verifica versión | Test estático del workflow + tag build produce `.deb` y `--verify` | Workflow listo y **desactivado** (solo `workflow_dispatch`) por costo/límite de CI; falta activarlo y ejecutar el tag build cuando el operador lo apruebe |
+| P0-02 | CI de release con `fpm` | `.github/workflows/build.yml` instala Ruby/fpm y verifica versión | Test estático del workflow + tag build produce `.deb` y `--verify` | **Diferido a release (no bloqueante)**: workflow listo y desactivado (solo `workflow_dispatch`); se ejecuta una sola vez al cumplir el checklist de release |
 | P0-03 | API host-only | compose sin socket, bind loopback, `BIMOS_EXECUTION_MODE=disabled` en contenedor | Test de compose seguro + endpoint de ejecución 503 en modo disabled | Hecho: compose validado y smoke real del contenedor |
 | P0-04 | Recursos reales | facades con `max_resources=None`; `--cpu-per-job` en dock/screen; `max_jobs` explícito en configs QM; `--jobs` respeta CLI | Tests de resolución MAX y de concurrencia QM | Hecho: además MAX acota `max_jobs` a la RAM instalada |
 | P0-05 | `screen --protein-eq` | avanzar `stage` a `dock` y persistir tras omitir APO | Test de cascada completa sin APO | Hecho |
@@ -33,6 +34,11 @@
 | P0-08 | CLI honesta | `run_tracked` propaga fallo y registra cancelación | Tests de exit code y evento de cancelación | Hecho |
 | P0-09 | Jobs aislados | directorio por `job.id`, nombre seguro, límite de upload | Tests de colisión y tamaño | Hecho |
 | P0-10 | Auth/exposición | token obligatorio fuera de loopback; CORS/allowlist; compose loopback | Tests de auth y bind | Hecho |
+
+**P0-02 — gate de release diferido.** No es un bloqueante de desarrollo y no se
+ejecuta CI todavía. El workflow queda manual (`workflow_dispatch`) y el trigger
+por tag comentado hasta que se autorice el presupuesto y se cumpla el checklist
+de la sección *Release gate P0-02*.
 
 ## P1 — Alto impacto (después de P0)
 
@@ -55,13 +61,11 @@
 
 ## Orden de ejecución
 
-1. P0-01/P0-02 (build/release).
-2. P0-04 (recursos).
-3. P0-05/P0-06 (correctitud).
-4. P0-07/P0-08 (ciclo de vida).
-5. P0-03/P0-09/P0-10 (API).
-6. Lint + suite completa + integración.
-7. P1 y luego roadmap existente.
+1. P0-01, P0-04, P0-05/P0-06, P0-07/P0-08, P0-03/P0-09/P0-10.
+2. Lint + suite completa + integración.
+3. P1/P2 (completados).
+4. **Release gate P0-02** solo cuando el operador lo autorice.
+5. R-ROAD-01/R-ROAD-02, también sujetos a autorización explícita.
 
 ## Gates
 
@@ -76,8 +80,24 @@
 - `builder.py --verify` verde; `.deb` reconstruido sin la copia duplicada
   `/opt/bimos/dockers` (dockers solo en `/opt/bimos/lib/dockers`).
 - CI/CD preparado pero **sin activar**: el workflow solo corre por
-  `workflow_dispatch`; el tag build real (P0-02) queda pendiente de aprobación
-  por costo/límite de GitHub Actions.
+  `workflow_dispatch`; no hay builds automáticos por push/tag.
+
+## Release gate P0-02 (diferido)
+
+No ejecutar CI hasta que se cumplan **todos** estos criterios:
+
+- [ ] Feature freeze (~95% del alcance de release) y versión/tag acordados.
+- [ ] `pyproject.toml` y el tag coinciden (`v` + versión, p. ej. `v0.1.0`).
+- [ ] `pixi run lint` limpio y `pixi run test` en verde.
+- [ ] `bun run lint` + `bun run build` verdes.
+- [ ] Integración real `python test.py` 7/7 con salida verificada.
+- [ ] `builder.py` local + `--verify` verdes, con `.deb` y payload revisados.
+- [ ] Smoke de la imagen API (`podman`/`docker`) y `docker compose config`.
+
+Cuando se autorice: activar el workflow (o lanzarlo manualmente), ejecutar **una
+sola** corrida Linux, descargar el artifact y repetir `--verify` sobre el `.deb`
+descargado. Windows/macOS quedan fuera de esta corrida hasta aprobar
+`R-ROAD-01`.
 
 ## Riesgos
 
@@ -87,7 +107,7 @@
   los endpoints deben seguir enviando `False` explícito.
 - La compatibilidad de `psycopg` v3 requiere cambiar la URL y el extra `db`.
 
-## Última validación (2026-10-21, cierre P1)
+## Última validación (2026-10-21, cierre P1/P2)
 
 - `pixi run lint`: limpio.
 - `pixi run test`: **520 passed, 0 failed** (2 tests QM saltables si ORCA/G16
