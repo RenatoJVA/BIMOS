@@ -30,7 +30,8 @@ def _strip_debug_binaries(dist_dir: Path) -> None:
     for elf in dist_dir.rglob("*"):
         if elf.is_symlink() or not elf.is_file():
             continue
-        probe = elf.read_bytes()[:4]
+        with elf.open("rb") as handle:
+            probe = handle.read(4)
         if probe != b"\x7fELF" or elf in seen:
             continue
         seen.add(elf)
