@@ -22,6 +22,37 @@ def test_ci_installs_fpm_before_builder() -> None:
     assert workflow.index("gem install fpm") < workflow.index("pixi run python ../builder.py")
 
 
+def test_ci_is_manual_until_the_budget_is_approved() -> None:
+    import yaml
+
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8")
+    )
+    triggers = workflow.get(True, workflow.get("on"))
+    assert triggers == {"workflow_dispatch": None}
+
+
+def test_ci_uses_least_privilege_permissions() -> None:
+    import yaml
+
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8")
+    )
+    assert workflow["permissions"] == {"contents": "read"}
+    assert "permissions" not in workflow["jobs"]["build-linux"]
+    assert workflow["jobs"]["release"]["permissions"] == {"contents": "write"}
+
+
+def test_ci_checks_tag_against_pyproject_version() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8")
+
+    assert "Verify tag matches pyproject version" in workflow
+    assert 'v${VERSION}' in workflow
+    assert workflow.index("Verify tag matches pyproject version") < workflow.index(
+        "pixi run python ../builder.py"
+    )
+
+
 def _pyproject_version() -> str:
     pyproject = (ROOT / "backend" / "pyproject.toml").read_text(encoding="utf-8")
     match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)

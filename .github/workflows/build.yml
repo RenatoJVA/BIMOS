@@ -5,16 +5,16 @@
 name: Build & Package BIMOS
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
+  # Manual only: release builds are intentionally not triggered by pushes or
+  # tags until the CI budget is approved. Re-add the tag trigger below to
+  # restore tag-driven releases:
+  # push:
+  #   tags:
+  #     - "v*.*.*"
   workflow_dispatch:
 
 permissions:
-  contents: write
-
-env:
-  APP_VERSION: ${{ github.ref_name }}
+  contents: read
 
 jobs:
   build-linux:
@@ -33,6 +33,15 @@ jobs:
           manifest-path: backend/pixi.toml
           locked: true
 
+      - name: Verify tag matches pyproject version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          VERSION="$(pixi run python -c "import pathlib, tomllib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")"
+          if [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match pyproject version v${VERSION}" >&2
+            exit 1
+          fi
+
       - name: Install system packaging tools (dpkg-deb, readelf, fpm)
         run: |
           sudo apt-get update
@@ -42,13 +51,9 @@ jobs:
 
       - name: Build (frontend + nuitka + .deb)
         run: pixi run python ../builder.py
-        env:
-          BIMOS_VERSION: ${{ github.ref_name }}
 
       - name: Verify artifacts (smoke, strip, SHASUMS, .deb audit)
         run: pixi run python ../builder.py --verify
-        env:
-          BIMOS_VERSION: ${{ github.ref_name }}
 
       - name: Upload .deb artifact
         uses: actions/upload-artifact@v4
@@ -70,6 +75,8 @@ jobs:
     needs: [build-linux]
     runs-on: ubuntu-24.04
     if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
