@@ -6,7 +6,18 @@ import type {
 } from './types';
 import { recordStats } from '../utils/history';
 
-export const API_BASE = 'http://localhost:8000/api/v1';
+const configuredBase = import.meta.env.VITE_API_BASE?.trim();
+
+/**
+ * Same-origin by default so the desktop window, a remote reverse proxy and
+ * `vite preview` all work without a hardcoded port. The dev server talks to
+ * the local API; `VITE_API_BASE` overrides both cases.
+ */
+export const API_BASE = configuredBase
+  ? configuredBase.replace(/\/+$/, '')
+  : import.meta.env.DEV
+    ? 'http://localhost:8000/api/v1'
+    : '/api/v1';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, init);
