@@ -14,6 +14,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from bimos.api.admin import router as admin_router
 from bimos.api.routes import router
 from bimos.api.security import ensure_safe_binding, is_loopback
 from bimos.config.settings import initialize, settings
@@ -45,6 +46,7 @@ async def _security_headers(request: Request, call_next):  # type: ignore[no-unt
     return response
 
 app.include_router(router)
+app.include_router(admin_router)
 
 
 # Resolve path to UI assets (works natively and inside Nuitka)
@@ -160,8 +162,21 @@ def _detect_system_dark_mode() -> bool:
     return False  # default: light
 
 
+def _tls_options() -> dict[str, str]:
+    """Return uvicorn TLS options, rejecting half-configured certificates."""
+    certfile = settings.tls_certfile.strip()
+    keyfile = settings.tls_keyfile.strip()
+    if bool(certfile) != bool(keyfile):
+        raise RuntimeError(
+            "BIMOS_TLS_CERTFILE and BIMOS_TLS_KEYFILE must be configured together."
+        )
+    if not certfile:
+        return {}
+    return {"ssl_certfile": certfile, "ssl_keyfile": keyfile}
+
+
 def _run_server(host: str, port: int):  # type: ignore[no-untyped-def]
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    uvicorn.run(app, host=host, port=port, log_level="warning", **_tls_options())
 
 
 def _is_reachable(url: str, timeout: int = 3) -> bool:
@@ -176,6 +191,31 @@ def _is_reachable(url: str, timeout: int = 3) -> bool:
             return True
     except Exception:
         return False
+
+
+def _local_target_url(host: str, port: int, desktop: bool) -> str | None:
+    """Start the local server when needed and return the URL the UI should open."""
+    # Fail closed: exposing the API outside loopback without a bearer token
+    # is never a silent default.
+    ensure_safe_binding(host)
+    tls_options = _tls_options()
+    if not is_loopback(host):
+        print(
+            "\n\033[1;32mInfo:\033[0m "
+            f"BIMOS is binding to non-loopback host {host!r} with "
+            "BIMOS_API_TOKEN authentication enabled."
+        )
+    if not desktop:
+        _run_server(host, port)
+        return None
+
+    # Start FastAPI in a daemon thread
+    t = threading.Thread(target=_run_server, args=(host, port), daemon=True)
+    t.start()
+    # Give uvicorn a moment to bind before Qt opens the URL
+    time.sleep(0.8)
+    scheme = "https" if tls_options else "http"
+    return f"{scheme}://{host}:{port}"
 
 
 def start_server(
@@ -199,25 +239,10 @@ def start_server(
             sys.exit(1)
         target_url = remote_url
     else:
-        # Fail closed: exposing the API outside loopback without a bearer token
-        # is never a silent default.
-        ensure_safe_binding(host)
-        if not is_loopback(host):
-            print(
-                "\n\033[1;32mInfo:\033[0m "
-                f"BIMOS is binding to non-loopback host {host!r} with "
-                "BIMOS_API_TOKEN authentication enabled."
-            )
-        if not desktop:
-            _run_server(host, port)
+        local_url = _local_target_url(host, port, desktop)
+        if local_url is None:
             return
-
-        # Start FastAPI in a daemon thread
-        t = threading.Thread(target=_run_server, args=(host, port), daemon=True)
-        t.start()
-        # Give uvicorn a moment to bind before Qt opens the URL
-        time.sleep(0.8)
-        target_url = f"http://{host}:{port}"
+        target_url = local_url
 
     # Detect OS color scheme BEFORE creating the window so background matches
     is_dark = _detect_system_dark_mode()

@@ -75,6 +75,28 @@ backend/htmlcov/
 test/outputs/
 tools/reportgen/
 
+# Additional generated artifacts and local credentials
+coverage.xml
+coverage/
+.tox/
+.nox/
+.hypothesis/
+.pip-wheel-metadata/
+*.prof
+*.pstats
+*.orig
+*.rej
+*.bak
+*.tmp
+frontend/.vite/
+frontend/coverage/
+.env.local
+.env.*.local
+*.key
+*.pem
+*.p12
+*.pfx
+
 # Local database files
 *.db
 *.sqlite
@@ -105,6 +127,13 @@ test/PREDICT/*
 # Internal docs (not for public repo)
 Manuscript/
 DOCS/
+
+# Local database project (not part of the BIMOS repository)
+DB_BIMOS/
+
+# Internal planning (local only; not tracked)
+PLAN.md
+ROADMAP.md
 
 AGENTS.md
 

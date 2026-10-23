@@ -19,6 +19,7 @@ SUSPICIOUS_PATTERNS = [
 
 ALLOWED_USES = {
     "password": [
+        "admin.py",  # HTML input type="password" for the API token
         "settings.py",  # database_url contains "password" in connection string
     ],
     "passwd": [
@@ -26,16 +27,20 @@ ALLOWED_USES = {
     ],
     "secret": [
         "SECURITY.md",
+        "database.py",
         "settings.py",
     ],
     "api_key": [],
     "token": [
+        "admin.py",
+        "database.py",
         "elements.py",
         "pipeline.py",
         "security.py",
         "server.py",
         "routes.py",
         "settings.py",
+        "tokens.py",
     ],
 }
 

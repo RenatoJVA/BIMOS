@@ -3,12 +3,14 @@ Job management endpoints.
 """
 
 import json
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from bimos.api.schemas import JobResponse
 from bimos.api.utils import get_job_or_404, job_to_response
+from bimos.config.settings import settings
 from bimos.infrastructure.job_store import JobStatus, store
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
@@ -22,6 +24,55 @@ async def list_jobs():  # type: ignore[no-untyped-def]
 async def get_job(job_id: str):  # type: ignore[no-untyped-def]
     """Get the status of a specific job."""
     return job_to_response(get_job_or_404(job_id))
+
+def _job_root(job_id: str) -> Path:
+    job = get_job_or_404(job_id)
+    if not job.output_dir:
+        raise HTTPException(status_code=409, detail=f"Job '{job_id}' has no output directory.")
+    root = Path(job.output_dir).expanduser().resolve()
+    workspace = settings.workspace_path.expanduser().resolve()
+    if not root.is_relative_to(workspace):
+        raise HTTPException(
+            status_code=403,
+            detail="Job output is outside the configured workspace.",
+        )
+    if not root.is_dir():
+        raise HTTPException(status_code=404, detail=f"Output directory not found for job '{job_id}'.")
+    return root
+
+
+def _safe_file(root: Path, relative: str) -> Path:
+    target = (root / relative).resolve()
+    if not target.is_relative_to(root) or not target.is_file() or target.is_symlink():
+        raise HTTPException(status_code=404, detail=f"File '{relative}' not found.")
+    return target
+
+
+@router.get("/{job_id}/files")
+async def list_job_files(job_id: str):  # type: ignore[no-untyped-def]
+    """List result files (PDB/TRR/other) for a completed job."""
+    root = _job_root(job_id)
+    files = []
+    for path in sorted(root.rglob("*")):
+        if path.is_file() and not path.is_symlink():
+            files.append(
+                {
+                    "path": path.relative_to(root).as_posix(),
+                    "size": path.stat().st_size,
+                    "content_type": "chemical/x-pdb" if path.suffix.lower() in {".pdb", ".ent"} else "application/octet-stream",
+                }
+            )
+    return {"job_id": job_id, "files": files}
+
+
+@router.get("/{job_id}/files/{path:path}")
+async def download_job_file(job_id: str, path: str):  # type: ignore[no-untyped-def]
+    """Download one result file, rejecting traversal and symlinks."""
+    root = _job_root(job_id)
+    target = _safe_file(root, path)
+    media_type = "chemical/x-pdb" if target.suffix.lower() in {".pdb", ".ent"} else "application/octet-stream"
+    return FileResponse(target, media_type=media_type, filename=target.name)
+
 
 @router.get("/{job_id}/logs")
 async def get_job_logs(job_id: str, tail: int | None = Query(None)):  # type: ignore[no-untyped-def]

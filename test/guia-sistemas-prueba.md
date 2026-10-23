@@ -65,10 +65,10 @@ bimos predict-boltz [OPCIONES] FASTA_FILE
 
 | Opción | Pipeline | Flag | Descripción |
 |---|---|---|---|
-| **Modelo** | ESMFold | `bimos predict` | ~8 GB, CPU, OpenFold optimizado. Rápido. Recycles default: 3 |
-| | Boltz-1 | `bimos predict-boltz` | Modelo generativo, múltiples modelos. Default: 5 corridas |
-| **Recycles** | ESMFold | `--recycles` | Número de reciclados (default: 3) |
-| **Modelos** | Boltz-1 | `-n, --models` | Número de modelos Boltz a ejecutar (default: 5) |
+| **Modelo** | Boltz-2 | `bimos predict` | Predicción estructural en GPU. Requiere CUDA; no hay fallback CPU. |
+| | Boltz-2 | `bimos predict-boltz` | Alias de `predict`. |
+| **Modelos** | Boltz-2 | `-n, --models` | Número de modelos Boltz a ejecutar (default: 5) |
+| **Modelo Boltz** | Boltz-2 | `-m, --model` | `boltz2` por defecto; `boltz1` solo para reproducir corridas antiguas |
 | **Output** | Ambos | `-o, --output` | Directorio de salida |
 | **Ejecución** | Ambos | `-b, --background` | Ejecutar en segundo plano |
 | | Ambos | `-g, --gui` | Abrir dashboard GUI |
@@ -76,11 +76,11 @@ bimos predict-boltz [OPCIONES] FASTA_FILE
 **Ejemplos:**
 
 ```bash
-# Predicción con ESMFold (rápido)
+# Predicción con Boltz-2 (GPU requerida)
 bimos predict test/APO/1AKI.fasta -o estructuras/
 
-# Predicción con Boltz-1 (mayor precisión, más lento)
-bimos predict-boltz test/APO/1AKI.fasta -n 10 -o estructuras/
+# Reproducir una corrida antigua con Boltz-1
+bimos predict test/APO/1AKI.fasta -m boltz1 -n 3 -o estructuras/
 ```
 
 ---
@@ -136,8 +136,7 @@ bimos qm-g16 [OPCIONES] DIRECTORIO
 │                                                             │
 │  PREDICCIÓN DE ESTRUCTURAS                                  │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │  FASTA ──┬── ESMFold  (─recycles N)                 │   │
-│  │          └── Boltz-1  (─models N)                   │   │
+│  │  FASTA ────── Boltz-2  (─models N, GPU)             │   │
 │  └─────────────────────────────────────────────────────┘   │
 │                                                             │
 │  DOCKING                                                    │

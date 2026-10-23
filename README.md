@@ -33,11 +33,15 @@
 
 ### Pre-built Installers
 
-| Platform | Format | Download |
-|----------|--------|----------|
-| Linux    | `.deb` | [Releases](https://github.com/RenatoJVA/BIMOS/releases) |
-| Windows  | `.exe` | [Releases](https://github.com/RenatoJVA/BIMOS/releases) |
-| macOS    | `.dmg` | [Releases](https://github.com/RenatoJVA/BIMOS/releases) |
+| Platform | Format | Status |
+|----------|--------|--------|
+| Linux    | `.deb` | Built and verified locally (`installer/dist/`) |
+| Windows  | `.exe` | Build/validation pending |
+| macOS    | `.dmg` | Build/validation pending (macOS host required) |
+
+The Linux `.deb` is the current validated artifact. Windows and macOS
+installers are not published yet; until they are validated, use the source
+installation or connect the desktop client to a remote BIMOS API.
 
 ### From Source
 
