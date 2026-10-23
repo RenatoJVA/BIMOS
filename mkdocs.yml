@@ -58,6 +58,7 @@ nav:
   - CLI Reference: cli.md
   - API Reference:
       - Public API: api/public.md
+      - Ligand Database: api/ligands.md
       - Docking: api/docking.md
       - Prediction: api/prediction.md
       - Molecular Dynamics: api/molecular_dynamics.md

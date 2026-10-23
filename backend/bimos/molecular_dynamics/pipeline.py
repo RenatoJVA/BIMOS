@@ -87,8 +87,8 @@ class MolecularDynamicsPipeline(Pipeline):
 
         for label in ("steep", "cg"):
             log_name = f"min-{comp}-{label}-mdrun.log"
-            if not (cwd / log_name).exists() or self._log_contains(
-                cwd, log_name, "did not converge to Fmax"
+            if not (cwd / log_name).exists() or not self._log_contains(
+                cwd, log_name, "Finished mdrun"
             ):
                 return Stage.MINIMIZATION
 
@@ -195,9 +195,11 @@ class MolecularDynamicsPipeline(Pipeline):
                 n += 1
 
             if not converged:
-                raise RuntimeError(
-                    f"{label} minimization of {comp} did not converge after "
-                    f"{self.md_config.max_min_iterations} iterations."
+                self.log(
+                    f"{label} minimization of {comp} reached "
+                    f"{self.md_config.max_min_iterations} iterations without "
+                    "Fmax convergence; continuing with the lowest-energy structure",
+                    logging.WARNING,
                 )
 
     def _run_sim_phase(self, phase: str, prev: str, comp: str, cwd: Path, is_holo: bool) -> None:

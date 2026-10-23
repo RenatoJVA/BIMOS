@@ -117,6 +117,9 @@ class Settings:
         # Required whenever the API is bound outside loopback. Empty means the
         # default local-only deployment, which does not need a token.
         self.api_token = os.getenv("BIMOS_API_TOKEN", "")
+        # Optional native TLS. Both files must be configured together.
+        self.tls_certfile = os.getenv("BIMOS_TLS_CERTFILE", "").strip()
+        self.tls_keyfile = os.getenv("BIMOS_TLS_KEYFILE", "").strip()
 
         # Paths
         self.base_path = BIMOS_BASE

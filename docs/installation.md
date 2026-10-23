@@ -2,8 +2,10 @@
 
 ## Pre-built Installers
 
-Grab the `.deb` (Linux), `.exe` (Windows) or `.dmg` (macOS) from the
-[releases page](https://github.com/RenatoJVA/BIMOS/releases).
+The Linux `.deb` is built and verified locally under `installer/dist/`.
+Windows `.exe` and macOS `.dmg` artifacts are not published yet; they require
+their native build hosts and validation. Until then, use the source
+installation or point the desktop client at a remote BIMOS API.
 
 ## From Source
 

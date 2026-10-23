@@ -149,10 +149,10 @@ def test_system_stats(client: TestClient, monkeypatch) -> None:
     assert "memory" in data
 
 
-def test_ligands_endpoint_removed(client: TestClient) -> None:
-    # /ligands was removed; ligand search is only exposed via the CLI.
-    response = client.get("/api/v1/ligands?q=test")
-    assert response.status_code == 404
+def test_ligands_endpoints_are_registered(client: TestClient) -> None:
+    paths = client.get("/openapi.json").json()["paths"]
+    assert "/api/v1/ligands" in paths
+    assert "/api/v1/ligands/{cid}" in paths
 
 
 def test_dock_endpoint_validation(client: TestClient, tmp_path: Path, monkeypatch) -> None:
@@ -296,3 +296,55 @@ def test_dock_rejects_oversized_upload(client: TestClient, tmp_path: Path, monke
         },
     )
     assert response.status_code == 413
+
+
+def test_job_result_files_list_download_and_traversal(
+    client: TestClient, tmp_path: Path, monkeypatch
+) -> None:
+    from bimos.config.settings import settings as bimos_settings
+    from bimos.infrastructure.job_store import store
+
+    monkeypatch.setattr(bimos_settings, "workspace_path", tmp_path)
+    root = tmp_path / "md-result"
+    root.mkdir()
+    (root / "final.pdb").write_text("ATOM      1  N   ALA A   1\n", encoding="utf-8")
+    (root / "traj.trr").write_bytes(b"TRR\x00binary")
+    job = store.create("md", output_dir=str(root))
+    try:
+        listed = client.get(f"/api/v1/jobs/{job.id}/files")
+        assert listed.status_code == 200
+        paths = {item["path"] for item in listed.json()["files"]}
+        assert paths == {"final.pdb", "traj.trr"}
+
+        pdb = client.get(f"/api/v1/jobs/{job.id}/files/final.pdb")
+        assert pdb.status_code == 200
+        assert pdb.headers["content-type"].startswith("chemical/x-pdb")
+        assert b"ATOM" in pdb.content
+
+        trr = client.get(f"/api/v1/jobs/{job.id}/files/traj.trr")
+        assert trr.status_code == 200
+        assert trr.content == b"TRR\x00binary"
+
+        traversal = client.get(f"/api/v1/jobs/{job.id}/files/..%2F..%2Fetc%2Fpasswd")
+        assert traversal.status_code == 404
+    finally:
+        store.delete(job.id)
+
+
+def test_job_result_files_rejects_output_outside_workspace(
+    client: TestClient, tmp_path: Path, monkeypatch
+) -> None:
+    from bimos.config.settings import settings as bimos_settings
+    from bimos.infrastructure.job_store import store
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    monkeypatch.setattr(bimos_settings, "workspace_path", workspace)
+    job = store.create("md", output_dir=str(outside))
+    try:
+        response = client.get(f"/api/v1/jobs/{job.id}/files")
+        assert response.status_code == 403
+    finally:
+        store.delete(job.id)

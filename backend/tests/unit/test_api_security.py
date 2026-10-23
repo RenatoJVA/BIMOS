@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from bimos.api.security import ensure_safe_binding
-from bimos.api.server import app
+from bimos.api.server import _tls_options, app
 from bimos.config.settings import settings
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -37,6 +37,35 @@ def test_safe_binding_rejects_whitespace_token(monkeypatch: pytest.MonkeyPatch) 
 def test_safe_binding_accepts_exposed_api_with_token(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "api_token", "secret")
     ensure_safe_binding("0.0.0.0")  # noqa: S104
+
+
+def test_tls_options_require_certificate_and_key_together(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "tls_certfile", "/tmp/server.crt")
+    monkeypatch.setattr(settings, "tls_keyfile", "")
+
+    with pytest.raises(RuntimeError, match="BIMOS_TLS_CERTFILE"):
+        _tls_options()
+
+
+def test_tls_options_are_empty_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "tls_certfile", "")
+    monkeypatch.setattr(settings, "tls_keyfile", "")
+
+    assert _tls_options() == {}
+
+
+def test_tls_options_are_forwarded_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "tls_certfile", "/tmp/server.crt")
+    monkeypatch.setattr(settings, "tls_keyfile", "/tmp/server.key")
+
+    assert _tls_options() == {
+        "ssl_certfile": "/tmp/server.crt",
+        "ssl_keyfile": "/tmp/server.key",
+    }
 
 
 def test_token_is_required_when_configured(

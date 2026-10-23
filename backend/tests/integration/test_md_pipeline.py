@@ -145,26 +145,41 @@ def test_minimization_fails_without_log(tmp_path: Path, monkeypatch) -> None:
         pipeline._run_minimization("comp", tmp_path, is_holo=False)
 
 
-def test_minimization_fails_when_not_converged(tmp_path: Path, monkeypatch) -> None:
+def test_minimization_continues_after_max_iterations_without_convergence(
+    tmp_path: Path, monkeypatch, caplog
+) -> None:
     pipeline = MolecularDynamicsPipeline(output_dir=str(tmp_path))
-    _, fake = _minimization_fake(converged=False)
+    calls, fake = _minimization_fake(converged=False)
     monkeypatch.setattr(pipeline, "_gmx", fake)
-    # Force a single iteration so the non-convergence path is exercised.
+    # Force a single iteration per integrator so the max-iterations path is exercised.
     object.__setattr__(pipeline.md_config, "max_min_iterations", 1)
 
-    with pytest.raises(RuntimeError, match="did not converge"):
+    with caplog.at_level("WARNING", logger="bimos.molecular_dynamics"):
         pipeline._run_minimization("comp", tmp_path, is_holo=False)
 
+    mdrun_calls = [args for args in calls if args[0] == "mdrun"]
+    assert len(mdrun_calls) == 2
+    assert "without Fmax convergence" in caplog.text
 
-def test_detect_stage_requires_new_minimization_logs(tmp_path: Path) -> None:
+
+def test_detect_stage_requires_finished_minimization_logs(tmp_path: Path) -> None:
     (tmp_path / "min-comp.gro").write_text("gro\n")
     (tmp_path / "comp.top").write_text("top\n")
     pipeline = MolecularDynamicsPipeline(output_dir=str(tmp_path))
 
     assert pipeline._detect_stage(tmp_path, "comp", is_holo=False) == Stage.MINIMIZATION
 
-    (tmp_path / "min-comp-steep-mdrun.log").write_text("Converged to Fmax!\n")
-    (tmp_path / "min-comp-cg-mdrun.log").write_text("Converged to Fmax!\n")
+    (tmp_path / "min-comp-steep-mdrun.log").write_text(
+        "Converged to Fmax!\nFinished mdrun on rank 0\n"
+    )
+    (tmp_path / "min-comp-cg-mdrun.log").write_text(
+        "Converged to Fmax!\nFinished mdrun on rank 0\n"
+    )
+    assert pipeline._detect_stage(tmp_path, "comp", is_holo=False) == Stage.NVT
+
+    (tmp_path / "min-comp-cg-mdrun.log").write_text(
+        "did not converge to Fmax\nFinished mdrun on rank 0\n"
+    )
     assert pipeline._detect_stage(tmp_path, "comp", is_holo=False) == Stage.NVT
 
     (tmp_path / "min-comp-cg-mdrun.log").write_text("did not converge to Fmax\n")

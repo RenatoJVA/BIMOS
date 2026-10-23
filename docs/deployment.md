@@ -79,14 +79,28 @@ docker compose up -d
 docker compose ps          # bimos-api healthy, bimos-db healthy
 ```
 
-Both services bind to loopback only. Put a TLS reverse proxy in front for
-remote access:
+Both services bind to loopback only. For remote access you can enable native
+TLS in BIMOS or terminate TLS in a reverse proxy:
 
-- Terminate TLS at the proxy (Caddy, nginx, Traefik) and forward to
-  `127.0.0.1:8000`.
-- Send `Authorization: Bearer <BIMOS_API_TOKEN>` from API clients; the
-  dashboard itself relies on the proxy or SSH tunnel for authentication.
+- Native TLS: set `BIMOS_TLS_CERTFILE` and `BIMOS_TLS_KEYFILE` to the PEM
+  certificate and key. Both files are required together, and the desktop UI
+  switches to `https://` automatically.
+- Proxy TLS: terminate TLS at Caddy/nginx/Traefik and forward to
+  `127.0.0.1:8000`; leave both TLS variables empty.
+- Always send `Authorization: Bearer <BIMOS_API_TOKEN>` from API clients; the
+  dashboard itself relies on TLS or an SSH tunnel for transport security.
 - Do not expose PostgreSQL (`127.0.0.1:5432`) to the network.
+
+Native TLS example:
+
+```bash
+export BIMOS_TLS_CERTFILE=/etc/bimos/tls/server.crt
+export BIMOS_TLS_KEYFILE=/etc/bimos/tls/server.key
+bimos -g --headless --host 0.0.0.0 --port 8443
+curl --cacert /etc/bimos/tls/ca.crt \
+  -H "Authorization: Bearer $BIMOS_API_TOKEN" \
+  https://127.0.0.1:8443/api/v1/health
+```
 
 For interactive use over an untrusted network, an SSH tunnel is the simplest
 option:
