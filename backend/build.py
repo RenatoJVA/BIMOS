@@ -12,7 +12,9 @@ from pathlib import Path
 
 # H-01: artefacts that identify a released BIMOS build. Anything hashed here is
 # what a licensee verifies before installing, so the list is intentionally narrow.
-_CHECKSUM_SUFFIXES = (".exe", ".bin", ".deb", ".dmg", ".AppImage", ".msi")
+# macOS ships a portable ``.tar.gz`` bundle (BIMOS.app + uninstaller); the
+# suffix match is done with ``str.endswith`` so compound extensions work.
+_CHECKSUM_SUFFIXES = (".exe", ".bin", ".deb", ".tar.gz", ".zip", ".AppImage", ".msi")
 _CHECKSUM_MANIFEST = "SHA256SUMS"
 
 
@@ -104,7 +106,7 @@ def _write_checksums(dist_dir: Path) -> Path | None:
 
     def _is_released(path: Path) -> bool:
         rel = path.relative_to(dist_dir)
-        if path.suffix.lower() not in _CHECKSUM_SUFFIXES:
+        if not path.name.lower().endswith(_CHECKSUM_SUFFIXES):
             return False
         # Nuitka intermediates live under main.<mode>.build; releases ship main.dist
         return not any(part.endswith(".build") for part in rel.parts)
@@ -250,8 +252,33 @@ def main():
         cmd.insert(len(cmd) - 5, "--windows-console-mode=attach")
         cmd.insert(len(cmd) - 5, "--no-deployment-flag=excluded-module-usage")
     elif is_macos:
-        cmd.insert(len(cmd) - 5, "--include-package=qtpy")
-        cmd.insert(len(cmd) - 5, "--enable-plugin=pyqt6")
+        # macOS uses the native Cocoa backend through pywebview/PyObjC: Qt must
+        # stay out of the bundle (no PyQt6, no QtWebEngine). The pywebview
+        # plugin decides platform modules on its own and conflicts with these
+        # explicit includes, so it is disabled and Cocoa is traced by hand.
+        # Only the concrete modules are included: PyObjC (Foundation, AppKit,
+        # WebKit...) is imported statically by webview.platforms.cocoa, and
+        # asking Nuitka to include it as a package demands --mode=app.
+        cmd.insert(len(cmd) - 5, "--disable-plugin=pywebview")
+        for module in ("webview", "webview.platforms.cocoa"):
+            cmd.insert(len(cmd) - 5, f"--include-module={module}")
+        for unused in (
+            "webview.platforms.android",
+            "webview.platforms.cef",
+            "webview.platforms.gtk",
+            "webview.platforms.qt",
+            "webview.platforms.win32",
+        ):
+            cmd.insert(len(cmd) - 5, f"--nofollow-import-to={unused}")
+        # PyObjC packages (Foundation/AppKit/WebKit) only work in a macOS app
+        # bundle; Nuitka refuses standalone-without-bundle for them. The bundle
+        # also gives WKWebView a real application identity.
+        cmd.insert(len(cmd) - 5, "--macos-create-app-bundle")
+        cmd.insert(len(cmd) - 5, "--macos-app-name=BIMOS")
+        cmd.insert(len(cmd) - 5, "--macos-app-mode=gui")
+        icon = Path(__file__).resolve().parent.parent / "installer" / "assets" / "bimos.icns"
+        if icon.exists():
+            cmd.insert(len(cmd) - 5, f"--macos-app-icon={icon}")
         cmd[cmd.index("--output-filename=bimos")] = "--output-filename=bimos.bin"
     else:
         # Linux

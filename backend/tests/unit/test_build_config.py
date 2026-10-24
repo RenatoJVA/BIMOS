@@ -93,3 +93,105 @@ def test_dockers_are_packaged_once() -> None:
     assert "/opt/bimos/dockers" not in postrm
     assert "opt/bimos/lib/dockers/Dockerfile.bimos" in builder
     assert "DOCKERS_DIR_PATH" not in nsi
+
+
+def test_macos_build_has_no_qt() -> None:
+    """macOS uses pywebview/Cocoa; Qt must never enter the bundle."""
+    build = (ROOT / "backend" / "build.py").read_text(encoding="utf-8")
+    pyproject = (ROOT / "backend" / "pyproject.toml").read_text(encoding="utf-8")
+
+    macos_branch = build.split("elif is_macos:", 1)[1].split("else:", 1)[0]
+    assert "qtpy" not in macos_branch
+    assert "pyqt6" not in macos_branch
+    assert "webview.platforms.cocoa" in macos_branch
+    assert "--disable-plugin=pywebview" in macos_branch
+    assert "--include-module={module}" in macos_branch
+    assert "--macos-create-app-bundle" in macos_branch
+
+    gui_extra = pyproject.split("gui = [", 1)[1].split("]", 1)[0]
+    assert "pyqt6>=6.11.0; sys_platform == 'linux'" in gui_extra
+    assert "qtpy>=2.4.3; sys_platform == 'linux'" in gui_extra
+    assert "sys_platform != 'win32'" not in gui_extra
+
+
+def test_macos_package_is_a_portable_bundle_not_a_dmg() -> None:
+    builder = (ROOT / "builder.py").read_text(encoding="utf-8")
+    script = (ROOT / "installer" / "build_macos_bundle.sh").read_text(encoding="utf-8")
+
+    for marker in (
+        "package_macos_bundle",
+        "verify_macos_bundle",
+        "macos-arm64.tar.gz",
+    ):
+        assert marker in builder
+    assert "create-dmg" not in builder.split("def package_macos_bundle", 1)[1]
+
+    for marker in (
+        "codesign --force --sign -",
+        "codesign --verify --deep --strict",
+        "NSAllowsLocalNetworking",
+        "Uninstall BIMOS.command",
+        "macos_launcher.c",
+        "tar --xattrs",
+        "COPYFILE_DISABLE=1",
+    ):
+        assert marker in script
+
+
+def test_tar_gz_archives_are_hashed() -> None:
+    build = (ROOT / "backend" / "build.py").read_text(encoding="utf-8")
+    assert '".tar.gz"' in build
+    assert "path.name.lower().endswith(_CHECKSUM_SUFFIXES)" in build
+
+
+def test_macos_binary_opens_the_gui_when_launched_directly() -> None:
+    main = (ROOT / "backend" / "main.py").read_text(encoding="utf-8")
+    assert '_is_frozen() and sys.platform == "darwin"' in main
+    assert 'sys.argv = [sys.argv[0], "-g"]' in main
+
+
+def test_windows_uninstaller_purges_user_data() -> None:
+    nsi = (ROOT / "installer" / "bimos.nsi").read_text(encoding="utf-8")
+    assert 'WriteRegStr   HKLM "${UNINSTALL_KEY}" "UserProfile"' in nsi
+
+    uninstall = nsi.split('Section "Uninstall"')[1]
+    assert 'ReadRegStr $1 HKLM "${UNINSTALL_KEY}" "UserProfile"' in uninstall
+    assert 'RMDir /r "$1\\.bimos"' in uninstall
+    assert 'RMDir /r "$1\\AppData\\Local\\BIMOS.exe.WebView2"' in uninstall
+
+
+def test_linux_postrm_distinguishes_remove_from_purge() -> None:
+    postrm = (ROOT / "installer" / "postrm.sh").read_text(encoding="utf-8")
+    assert '[ "$1" = "purge" ]' in postrm
+    assert "SUDO_USER" in postrm
+    assert "BIMOS.conf" in postrm
+    assert "local/share/BIMOS" in postrm
+    assert "rmi -f localhost/bimos/global:latest" in postrm
+
+
+def test_setup_refuses_to_build_the_cuda_image_on_macos(
+    monkeypatch, tmp_path
+) -> None:
+    """Prevent a multi-GB CUDA build on a Mac that cannot run it."""
+    from click.testing import CliRunner
+
+    from bimos.cli.commands import setup as setup_module
+    from bimos.infrastructure import container
+    from bimos.shared import user_config
+
+    monkeypatch.setattr(setup_module.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(setup_module.settings, "ensure_dirs", lambda: None)
+    monkeypatch.setattr(user_config, "user_config_dir", lambda: tmp_path)
+    monkeypatch.setattr(user_config, "is_custom", lambda name: False)
+
+    def fail_build(**kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("build_image must not run on macOS")
+
+    monkeypatch.setattr(container, "build_image", fail_build)
+
+    result = CliRunner().invoke(setup_module.setup, [])
+    assert result.exit_code == 0, result.output
+    assert "requires Linux" in result.output
+
+    result = CliRunner().invoke(setup_module.setup, ["--config-only"])
+    assert result.exit_code == 0, result.output

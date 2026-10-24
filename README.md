@@ -37,11 +37,18 @@
 |----------|--------|--------|
 | Linux    | `.deb` | Built and verified locally (`installer/dist/`) |
 | Windows  | `.exe` | Build/validation pending |
-| macOS    | `.dmg` | Build/validation pending (macOS host required) |
+| macOS    | `.tar.gz` (portable `BIMOS.app`, arm64) | UI opens and API responds on Apple Silicon; no local CUDA |
 
-The Linux `.deb` is the current validated artifact. Windows and macOS
-installers are not published yet; until they are validated, use the source
+The Linux `.deb` is the current validated artifact. The macOS portable bundle
+is built locally on Apple Silicon and validated for the interface; Windows is
+still pending. Until the remaining artifacts are validated, use the source
 installation or connect the desktop client to a remote BIMOS API.
+
+On macOS the bundle carries no CUDA stack and does not build the scientific
+image: it is a UI client. Point it at a Linux GPU server with
+`BIMOS_REMOTE_URL` for prediction/docking/MD jobs. Uninstall with
+`Uninstall BIMOS.command` or `bimos uninstall` (see
+[docs/uninstall.md](docs/uninstall.md)).
 
 ### From Source
 

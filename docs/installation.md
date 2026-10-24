@@ -3,9 +3,37 @@
 ## Pre-built Installers
 
 The Linux `.deb` is built and verified locally under `installer/dist/`.
-Windows `.exe` and macOS `.dmg` artifacts are not published yet; they require
-their native build hosts and validation. Until then, use the source
-installation or point the desktop client at a remote BIMOS API.
+Windows `.exe` is not published yet; it requires its native build host and
+validation. The macOS artifact is a portable bundle built on Apple Silicon
+(`installer/dist/BIMOS-<version>-macos-arm64.tar.gz`).
+
+### macOS (Apple Silicon)
+
+Unpack the archive and run `BIMOS.app` in place, or drag it to
+`/Applications`. There is no installer and no administrator password; data
+lives in `~/.bimos`, never inside the app bundle.
+
+```bash
+tar --xattrs -xzf BIMOS-0.1.0-macos-arm64.tar.gz
+open BIMOS.app
+```
+
+Use `tar --xattrs` (also works in Finder's Archive Utility): the archive keeps
+Nuitka's detached signatures, which `codesign --verify --deep --strict`
+expects.
+
+The package uses an ad-hoc signature (not notarized). On first launch macOS
+may block it: right-click the app → **Open** → **Open**, or run:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/BIMOS.app
+```
+
+macOS is a UI/API client: it does not ship CUDA and `bimos setup` will not
+build the scientific image (use `bimos setup --config-only`, or point the app
+at a Linux GPU server with `BIMOS_REMOTE_URL`). See
+[Uninstall](uninstall.md) for the standalone purge helper and
+[ADR 0001](adr/0001-macos-portable-bundle.md) for the support scope.
 
 ## From Source
 
@@ -69,3 +97,7 @@ docker compose up -d
   (see [README requirements](https://github.com/RenatoJVA/BIMOS#requirements))
 - A licensed ORCA or Gaussian 16 installation for the `qm-orca` / `qm-g16`
   commands — neither is distributed with BIMOS (see [TERMS.md](https://github.com/RenatoJVA/BIMOS/blob/main/TERMS.md))
+
+On macOS there is no NVIDIA/CUDA: the app works as a UI/API client and the
+scientific image is not built locally. See
+[Uninstall](uninstall.md) for the complete purge procedure.

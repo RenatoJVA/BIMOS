@@ -1,5 +1,6 @@
 """Centralized configuration for BIMOS."""
 
+import json
 import os
 import shutil
 import sys
@@ -197,6 +198,33 @@ class Settings:
             return ""
         return os.path.expandvars(os.path.expanduser(path))
 
+    def _write_paths_manifest(self) -> None:
+        """Record the effective paths so the uninstaller can find custom ones.
+
+        ``BIMOS_WORKSPACE``/``BIMOS_CACHE``/``BIMOS_LOGS`` may point outside
+        ``~/.bimos``; without this file a purge could not discover them.
+        Best effort: a read-only or missing home must never break the CLI.
+        """
+        target = self.base_path / "paths.json"
+        payload = {
+            "version": 1,
+            "base": str(self.base_path),
+            "workspace": str(self.workspace_path),
+            "cache": str(self.cache_path),
+            "logs": str(self.logs_path),
+            "image": self.bimos_image,
+            "app_version": self.app_version,
+        }
+        text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+        try:
+            if target.is_file() and target.read_text(encoding="utf-8") == text:
+                return
+            tmp = target.with_name("paths.json.tmp")
+            tmp.write_text(text, encoding="utf-8")
+            tmp.replace(target)
+        except OSError:
+            return
+
     def ensure_dirs(self) -> None:
         """Create all required directories and user config files on first run."""
         for p in [
@@ -206,6 +234,8 @@ class Settings:
             self.logs_path,
         ]:
             Path(p).mkdir(parents=True, exist_ok=True)
+
+        self._write_paths_manifest()
 
         from bimos.shared.user_config import ensure_user_configs
 

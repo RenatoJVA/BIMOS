@@ -18,7 +18,8 @@ BUILDER = (ROOT / "builder.py").read_text(encoding="utf-8")
 COMPOSE = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
 DESKTOP_ENTRY = (ROOT / "installer" / "assets" / "bimos.desktop").read_text(encoding="utf-8")
 POSTINST = (ROOT / "installer" / "postinst.sh").read_text(encoding="utf-8")
-BUILD_DMG = (ROOT / "installer" / "build_dmg.sh").read_text(encoding="utf-8")
+BUILD_MACOS = (ROOT / "installer" / "build_macos_bundle.sh").read_text(encoding="utf-8")
+MACOS_LAUNCHER = (ROOT / "installer" / "assets" / "macos_launcher.c").read_text(encoding="utf-8")
 
 LEGAL_DOCS = ("LICENSE", "NOTICE.md", "TERMS.md", "PRIVACY.md")
 
@@ -215,24 +216,28 @@ def test_no_phantom_gui_argument() -> None:
         assert "BIMOS_GUI" not in content, f"{name} still passes the phantom BIMOS_GUI arg"
     assert "Exec=bimos -g" in DESKTOP_ENTRY
     assert "bimos -g" in POSTINST
-    # The DMG script documents the phantom arg in a comment; what matters is
-    # that the launcher really passes -g (inside a quoted heredoc).
-    assert 'exec "\\$DIR/../Resources/bimos/${BINARY_NAME}" -g "\\$@"' in BUILD_DMG
-    assert "bimos.bin\" BIMOS_GUI" not in BUILD_DMG
+    # The macOS app uses a compiled launcher that appends -g before exec'ing the
+    # Nuitka binary; the phantom BIMOS_GUI arg must not come back.
+    assert 'child_argv[1] = "-g";' in MACOS_LAUNCHER
+    assert "BIMOS_GUI" not in MACOS_LAUNCHER
+    assert "BIMOS_GUI" not in BUILD_MACOS
 
 
-def test_dmg_builder_uses_nuitka_standalone_layout() -> None:
+def test_macos_bundle_uses_nuitka_standalone_layout() -> None:
     """Nuitka --standalone emits main.dist/bimos.bin plus its .so tree."""
-    assert 'DIST_DIR="backend/dist/main.dist"' in BUILD_DMG
-    assert 'BINARY_SRC="${DIST_DIR}/${BINARY_NAME}"' in BUILD_DMG
+    assert 'DIST_DIR="backend/dist/main.dist"' in BUILD_MACOS
+    assert 'BINARY_SRC="${DIST_DIR}/${BINARY_NAME}"' in BUILD_MACOS
     # The old script copied a non-existent backend/dist/bimos
-    assert "BINARY_SRC=\"backend/dist/bimos\"" not in BUILD_DMG
+    assert 'BINARY_SRC="backend/dist/bimos"' not in BUILD_MACOS
     # Info.plist: ProgramArguments is not a valid key
-    assert "<key>ProgramArguments</key>" not in BUILD_DMG
+    assert "<key>ProgramArguments</key>" not in BUILD_MACOS
     # Version must come from the CLI arg or pyproject, not a lone constant
-    assert 'VERSION="$1"' in BUILD_DMG
-    assert "backend/pyproject.toml" in BUILD_DMG
-    assert "Version: arg > pyproject.toml > fallback" in BUILD_DMG
+    assert 'VERSION="$1"' in BUILD_MACOS
+    assert "backend/pyproject.toml" in BUILD_MACOS
+    assert "Version: arg > pyproject.toml > fallback" in BUILD_MACOS
+    # The bundle must keep the uninstall helper and local-networking exception.
+    assert "Uninstall BIMOS.command" in BUILD_MACOS
+    assert "NSAllowsLocalNetworking" in BUILD_MACOS
 
 
 def test_spec_file_is_marked_as_reference_only() -> None:

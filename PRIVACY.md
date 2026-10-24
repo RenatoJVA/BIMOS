@@ -55,7 +55,23 @@ data.
 - Before sharing `screen_report.csv`, logs, or workspaces, check them for
   sensitive sequences or paths — they are plain files under your control.
 
-## 5. Changes
+## 5. Data Deletion
+
+`bimos uninstall` (or the standalone `Uninstall BIMOS.command` on macOS)
+removes every application-owned artifact: the app bundle, `~/.bimos`
+(configuration, workspace, cache, logs), web/UI state, preferences and, when
+present, the BIMOS container image and containers. Use `--dry-run` to preview
+and `--verify` to prove that nothing remains; `--json` emits a deletion report
+suitable for institutional records. `--keep-data` preserves `~/.bimos` while
+removing the rest.
+
+The scope and per-platform procedures are documented in
+[docs/uninstall.md](./docs/uninstall.md). OS-managed copies (Time Machine,
+APFS snapshots, unified log, Spotlight indexes, crash reports) and files you
+saved outside BIMOS paths are outside the application's control and are not
+deleted.
+
+## 6. Changes
 
 Material changes to this policy are noted in
 [CHANGELOG.md](./CHANGELOG.md).
