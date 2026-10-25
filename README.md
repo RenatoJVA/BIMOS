@@ -109,7 +109,7 @@ BIMOS/
 ├── backend/          # Python CLI + FastAPI server + computational pipelines
 │   └── bimos/        # Core package (cli, api, docking, md, prediction, qm, ...)
 ├── frontend/         # React + TypeScript desktop dashboard
-├── installer/        # Cross-platform packaging (NSIS, DMG, DEB)
+├── installer/        # Cross-platform packaging (NSIS, DEB, macOS portable bundle)
 ├── builder.py        # Master build script (Nuitka + installer)
 └── MANUAL.md         # Full user manual
 ```
