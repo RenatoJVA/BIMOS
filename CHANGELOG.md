@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional native TLS for the API (`BIMOS_TLS_CERTFILE`/`BIMOS_TLS_KEYFILE`); both files are required together and the desktop URL switches to HTTPS.
 - Ligand database API (`GET/POST /api/v1/ligands`, `PATCH/DELETE /api/v1/ligands/{cid}`), named API tokens with `admin`/`editor`/`viewer` roles, and an `/admin/ligands` panel with token management, CRUD and soft delete.
 - Job result endpoints (`GET /api/v1/jobs/{job_id}/files` and `/files/{path}`) for secure PDB/TRR download, with traversal and workspace checks.
+- `bimos uninstall`: residue-free purge with `--dry-run`, `--yes`, `--keep-data`, `--deep`, `--remove-app`, `--include-outputs`, `--verify`, `--print-manifest`, `--json` and explicit safety guards. Exit codes distinguish success, errors, aborted confirmation and remaining residues.
+- macOS portable bundle: `BIMOS-<version>-macos-arm64.tar.gz` with `BIMOS.app` (Cocoa, no Qt/CUDA), a standalone `Uninstall BIMOS.command` and `LEEME.txt`. No DMG or installer; nothing is written outside the user's home.
+- `~/.bimos/paths.json` records the effective workspace/cache/log paths so the uninstaller can find overrides.
+- `docs/uninstall.md`, `docs/build-macos.md` and ADR 0001 document the purge contract, the reproducible macOS build and the support scope.
 
 ### Changed
 
@@ -26,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The ligand database adds PostgreSQL `pg_trgm` GIN indexes for leading-wildcard name/CID/SMILES searches; the existing composite index covers logP/molar-mass ranges.
 - Ligands gain an `active` flag for soft delete; `init_db` adds it idempotently to existing PostgreSQL schemas.
 - `bimos doctor --json` now emits only JSON, with `viable` and `blocked_processes` fields.
+- macOS builds with `uv` + Xcode and the native Cocoa backend; PyQt6/QtWebEngine are Linux-only. The macOS artifact is a portable app bundle instead of a DMG.
+- Linux `apt purge` and the Windows uninstaller now remove user data (the Windows installer records the installing profile); `apt remove` still keeps it.
+- On Linux/Windows, pywebview state is stored under `~/.bimos/cache/webview` so the purge has a single known location.
+- `bimos setup` refuses to build the CUDA image on macOS unless `--force` is passed; `--config-only` still works.
 
 ### Fixed
 
@@ -35,6 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MD minimization no longer aborts when `max_min_iterations` is reached without Fmax convergence; it logs a warning and continues with the lowest-energy structure. A completed minimization is detected by `Finished mdrun` in the log instead of the absence of a convergence error.
 - `seed_ligands()` now uses a SQLAlchemy 2 `select()` instead of passing a legacy `Query` to `Session.scalars()`.
 - The README, installation guide and test guide no longer advertise unpublished Windows/macOS installers or describe ESMFold as the runtime predictor.
+- `bimos uninstall --verify` no longer recreates `~/.bimos` (the CLI first-run bootstrap is skipped and the job store creates its directory lazily), which previously made verification report a false residue.
+- macOS GUI: `private_mode`/`storage_path` are only passed to `pywebview.start` on Linux/Windows; on Cocoa they made the window close immediately.
+- API requests no longer fail when the optional database module is unavailable (default local install).
+- macOS build hardening: Mach-O DWARF is audited with `otool`, the portable archive keeps Nuitka's detached signatures with `tar --xattrs`, and `codesign --verify --deep --strict` is part of the release audit.
 
 ## [0.1.0] - 2026-06-14
 

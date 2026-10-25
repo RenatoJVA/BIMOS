@@ -262,6 +262,15 @@ bimos dock protein.pdb candidates_1000 --dataset -g  # run + monitor live
 
 Per-pipeline tuning lives in `~/.bimos/config/*.yaml` (`md`, `boltz`, `docking`, `orca`, `gaussian`): default (packaged) → custom (your edits) → max (`bimos --max` uses all CPU threads). Invalid values are clamped; see `bimos setup` to inspect profiles.
 
+### 6.1 Uninstall / purge
+
+`bimos uninstall` removes every application-owned artifact (app bundle with
+`--remove-app`, `~/.bimos`, web state, preferences, container image) and can
+prove it with `--verify`. On macOS the portable bundle also ships
+`Uninstall BIMOS.command`, which works even if the app is damaged. See
+[docs/uninstall.md](./docs/uninstall.md) for flags, exit codes and the exact
+scope (OS-managed backups/logs are out of scope).
+
 ---
 
 ## 7. Legal Disclaimer
@@ -278,6 +287,9 @@ Per-pipeline tuning lives in `~/.bimos/config/*.yaml` (`md`, `boltz`, `docking`,
 ## 8. Troubleshooting
 
 - **White Screen on Launch**: check `~/.bimos/.env`. If `BIMOS_REMOTE_URL` points somewhere unreachable, the UI stalls — comment it out for local mode.
+- **macOS blocks the app (Gatekeeper)**: the portable bundle is ad-hoc signed, not notarized. Right-click `BIMOS.app` → **Open** → **Open**, or run `xattr -dr com.apple.quarantine /Applications/BIMOS.app`. See [ADR 0001](./docs/adr/0001-macos-portable-bundle.md).
+- **`bimos setup` refuses to build on macOS**: expected — the scientific image needs Linux + NVIDIA/CUDA. Use `bimos setup --config-only` and point the client at a Linux GPU server with `BIMOS_REMOTE_URL`, or `--force` only for unsupported experiments.
+- **macOS cannot run Boltz**: there is no CUDA and no CPU fallback. Boltz/docking/MD evidence comes from Linux/GPU; macOS is a UI/API client.
 - **Segment Fault (Linux)**: missing OpenGL libs for the desktop shell; software rendering is enforced automatically, but ensure a standard display server.
 - **Docker Permission Denied**: add your user to the `docker` group (`sudo usermod -aG docker $USER`) or use Podman.
 - **Boltz aborts (no GPU)**: predictions require NVIDIA + CDI passthrough; MD/docking run fine on CPU.

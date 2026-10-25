@@ -1,3 +1,4 @@
+import platform
 import sys
 from pathlib import Path
 
@@ -36,6 +37,17 @@ def setup(force: bool, config_only: bool) -> None:
     click.echo("Profiles: default (packaged) | custom (edited YAML) | max (bimos --max)")
 
     if config_only:
+        return
+
+    if platform.system() == "Darwin" and not force:
+        click.echo(
+            "The scientific image requires Linux + NVIDIA/CUDA and is not built on macOS.\n"
+            "macOS runs BIMOS as a UI client. Options:\n"
+            "  bimos setup --config-only          create ~/.bimos without the image\n"
+            "  BIMOS_REMOTE_URL=<linux-host>:8000 connect the UI to a GPU server\n"
+            "Use --force only to experiment with an unsupported local build.",
+            err=True,
+        )
         return
 
     from bimos.infrastructure.container import build_image, image_exists

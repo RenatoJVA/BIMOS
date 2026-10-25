@@ -26,9 +26,12 @@ db = [
 gui = [
     "pywebview>=6.2.1",
     "pythonnet>=3.0.5; sys_platform == 'win32'",
-    "pyqt6>=6.11.0; sys_platform != 'win32'",
-    "pyqt6-webengine>=6.11.0; sys_platform != 'win32'",
-    "qtpy>=2.4.3; sys_platform != 'win32'",
+    # Qt/WebEngine is the Linux GUI backend. Windows uses WinForms+WebView2 and
+    # macOS uses Cocoa via pywebview/PyObjC: installing PyQt6 there would pull
+    # heavyweight Qt into the bundles for no benefit.
+    "pyqt6>=6.11.0; sys_platform == 'linux'",
+    "pyqt6-webengine>=6.11.0; sys_platform == 'linux'",
+    "qtpy>=2.4.3; sys_platform == 'linux'",
 ]
 monitoring = [
     "psutil>=5.9.0",
@@ -130,6 +133,12 @@ extend-immutable-calls = ["fastapi.File", "fastapi.Form", "fastapi.Path", "fasta
 # Container/infra code shells out to docker/podman with argv arrays (no shell=True);
 # command tokens come from job config, not user free text.
 "bimos/infrastructure/container.py" = ["S603", "S607", "PLR0915", "PLR0913", "PLR0912"]
+# Purge shells out to podman/docker with argv arrays only; the orchestrator takes
+# the full option matrix and has the platform branch table.
+"bimos/infrastructure/purge.py" = ["S603", "S607", "PLR0913", "PLR0912", "PLR0915"]
+# The uninstall command exposes one flag per purge option (click pattern), and
+# its confirmation flow is a linear set of guarded branches.
+"bimos/cli/commands/uninstall.py" = ["PLR0913", "PLR0912"]
 "bimos/infrastructure/job_store.py" = ["S603", "S110", "S112"]
 # GROMACS/ORCA/Gaussian are invoked by name from $PATH (host/CONDA_ENV), argv-only
 "bimos/quantum_chemistry/pipeline.py" = ["S603", "S607", "PLR0915", "PLR0912"]

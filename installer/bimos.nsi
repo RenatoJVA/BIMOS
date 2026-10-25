@@ -91,6 +91,10 @@ Section "BIMOS Core (required)" SecCore
     WriteRegStr   HKLM "${UNINSTALL_KEY}" "URLInfoAbout"     "${APP_URL}"
     WriteRegStr   HKLM "${UNINSTALL_KEY}" "InstallLocation"  "$INSTDIR"
     WriteRegStr   HKLM "${UNINSTALL_KEY}" "UninstallString"  "$INSTDIR\Uninstall.exe"
+    ; Remember who installed BIMOS: the uninstaller runs elevated, so $PROFILE
+    ; would otherwise point at the administrator account, not the user whose
+    ; ~/.bimos and WebView2 state must be purged.
+    WriteRegStr   HKLM "${UNINSTALL_KEY}" "UserProfile"     "$PROFILE"
     WriteRegDWORD HKLM "${UNINSTALL_KEY}" "NoModify"         1
     WriteRegDWORD HKLM "${UNINSTALL_KEY}" "NoRepair"         1
 
@@ -143,6 +147,17 @@ Section "Uninstall"
     ${WordReplace} $0 "$INSTDIR"  "" "+" $0
     WriteRegExpandStr HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "Path" "$0"
     SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=5000
+
+    ; --- Remove user-scoped BIMOS data (no residue policy) ---
+    ; The installing user's profile was recorded by the installer because this
+    ; uninstaller runs elevated and $PROFILE would be the administrator's.
+    ReadRegStr $1 HKLM "${UNINSTALL_KEY}" "UserProfile"
+    StrCmp $1 "" bim_main_done
+    RMDir /r "$1\.bimos"
+    RMDir /r "$1\AppData\Local\pywebview"
+    RMDir /r "$1\AppData\Local\BIMOS.exe.WebView2"
+    RMDir /r "$1\AppData\Roaming\BIMOS"
+bim_main_done:
 
     DeleteRegKey HKLM "${UNINSTALL_KEY}"
 SectionEnd

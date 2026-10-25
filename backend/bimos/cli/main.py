@@ -39,7 +39,7 @@ click.rich_click.COMMAND_GROUPS = {
         },
         {
             "name": "System & Management",
-            "commands": ["doctor", "setup", "jobs", "db", "completion"],
+            "commands": ["doctor", "setup", "uninstall", "jobs", "db", "completion"],
         },
     ],
     "main.py": [
@@ -61,7 +61,7 @@ click.rich_click.COMMAND_GROUPS = {
         },
         {
             "name": "System & Management",
-            "commands": ["doctor", "setup", "jobs", "db", "completion"],
+            "commands": ["doctor", "setup", "uninstall", "jobs", "db", "completion"],
         },
     ]
 }
@@ -129,13 +129,16 @@ def cli(ctx: click.Context, debug: bool, max: bool, gui: bool, manual: bool, hos
 
     from bimos.config.settings import initialize, settings
 
-    initialize()
-    gc.collect()
+    # The uninstaller must not bootstrap ~/.bimos: doing so would recreate the
+    # directory it is about to delete (and make --verify report a residue).
+    if ctx.invoked_subcommand != "uninstall":
+        initialize()
+        gc.collect()
+        if debug:
+            logging.getLogger("bimos").setLevel(logging.DEBUG)
+        settings.max_threads = max
+        settings.ensure_dirs()
 
-    if debug:
-        logging.getLogger("bimos").setLevel(logging.DEBUG)
-    settings.max_threads = max
-    settings.ensure_dirs()
     from bimos.cli.utils import set_output_format
     set_output_format(output_format)
 
@@ -171,10 +174,12 @@ def _lazy_register_commands() -> None:
     from bimos.cli.commands.screen import screen
     from bimos.cli.commands.setup import setup
     from bimos.cli.commands.system import completion, db, jobs
+    from bimos.cli.commands.uninstall import uninstall
     from bimos.cli.commands.workflow import workflow
 
     cli.add_command(doctor)
     cli.add_command(setup)
+    cli.add_command(uninstall)
     cli.add_command(predict)
     cli.add_command(predict_boltz)
     cli.add_command(dock)

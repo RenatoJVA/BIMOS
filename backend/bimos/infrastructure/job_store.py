@@ -47,12 +47,20 @@ class JobRecord(BaseModel):
 class FileJobStore:
     def __init__(self) -> None:
         self.jobs_dir = settings.workspace_path / ".jobs"
-        self.jobs_dir.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         self._log_buffers: dict[str, list[str]] = {}
         self._log_buffer_size = 64
         self._list_cache: list[JobRecord] | None = None
         self._list_cache_stamp: tuple[int, int] | None = None
+
+    def _ensure_jobs_dir(self) -> None:
+        """Create the job directory lazily.
+
+        Importing this module must stay side-effect free: the uninstaller
+        imports the CLI command tree and would otherwise recreate ~/.bimos
+        (and report it as a residue) right before deleting it.
+        """
+        self.jobs_dir.mkdir(parents=True, exist_ok=True)
 
     def _path(self, job_id: str) -> Path:
         return self.jobs_dir / f"{job_id}.json"
@@ -79,6 +87,7 @@ class FileJobStore:
 
     def create(self, kind: str, meta: dict[str, Any] | None = None, output_dir: str = "") -> JobRecord:
         import uuid
+        self._ensure_jobs_dir()
         job_id = uuid.uuid4().hex[:12]
         job = JobRecord(
             id=job_id,

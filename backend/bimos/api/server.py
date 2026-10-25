@@ -308,6 +308,26 @@ def start_server(
             except ImportError:
                 pass
 
-    webview.start(gui=desktop_gui, debug=False, func=_on_start)  # type: ignore[arg-type]
+    # Persist web state inside ~/.bimos so the uninstaller has a single known
+    # location to purge. Qt and WebView2 honour storage_path; Cocoa (WKWebView)
+    # ignores it and uses ~/Library/WebKit/org.bimos.app, which the macOS purge
+    # list covers explicitly. pywebview 6.2 on Cocoa returns immediately from
+    # start() when private_mode/storage_path are passed, so they are not used
+    # on darwin.
+    webview_options: dict[str, object] = {}
+    if sys.platform != "darwin":
+        storage_path = settings.cache_path / "webview"
+        storage_path.mkdir(parents=True, exist_ok=True)
+        webview_options = {
+            "private_mode": False,
+            "storage_path": str(storage_path),
+        }
+
+    webview.start(
+        gui=desktop_gui,
+        debug=False,
+        func=_on_start,
+        **webview_options,
+    )  # type: ignore[arg-type]
 
     sys.exit(0)

@@ -54,6 +54,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Installation: installation.md
+  - Uninstall: uninstall.md
   - Deployment: deployment.md
   - CLI Reference: cli.md
   - API Reference:
@@ -64,5 +65,8 @@ nav:
       - Molecular Dynamics: api/molecular_dynamics.md
       - Quantum Chemistry: api/quantum_chemistry.md
       - Infrastructure: api/infrastructure.md
-  - Development: development.md
+  - Development:
+      - Overview: development.md
+      - macOS build (portable bundle): build-macos.md
+      - ADR 0001 — macOS scope: adr/0001-macos-portable-bundle.md
   - Contributing: contributing.md

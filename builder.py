@@ -2,11 +2,11 @@
 """
 BIMOS Master Builder
 ====================
-Builds the Nuitka binary and then wraps it in a native installer:
+Builds the Nuitka binary and then wraps it in a native package:
 
   Linux   →  .deb  (via fpm)
   Windows →  .exe  (via NSIS / makensis)
-  macOS   →  .dmg  (via create-dmg)
+  macOS   →  portable .tar.gz with BIMOS.app (no installer, no DMG)
 
 Usage:
     python builder.py [OPTIONS]
@@ -88,15 +88,26 @@ def build_nuitka(root: Path):
 
 # ── Verification ────────────────────────────────────────────────────────────
 
+def _find_binary(root: Path) -> Path | None:
+    """Locate the compiled binary in either Nuitka output layout.
+
+    On macOS ``--macos-create-app-bundle`` puts the executable inside
+    ``main.app/Contents/MacOS``; plain standalone (Linux/Windows) uses
+    ``main.dist``.
+    """
+    candidates = [
+        root / "backend" / "dist" / "main.dist" / "bimos.bin",
+        root / "backend" / "dist" / "main.dist" / "bimos.exe",
+        root / "backend" / "dist" / "main.app" / "Contents" / "MacOS" / "bimos.bin",
+    ]
+    return next((candidate for candidate in candidates if candidate.exists()), None)
+
+
 def smoke_test_binary(root: Path, version: str):
     """Execute the compiled binary with --version and demand an exact match."""
-    binary_dir = root / "backend" / "dist" / "main.dist"
-    for name in ("bimos.bin", "bimos.exe"):
-        binary = binary_dir / name
-        if binary.exists():
-            break
-    else:
-        error(f"Binary not found under {binary_dir}")
+    binary = _find_binary(root)
+    if binary is None:
+        error(f"Binary not found under {root / 'backend' / 'dist'}")
         sys.exit(1)
 
     proc = subprocess.run([str(binary), "--version"], capture_output=True, text=True, timeout=120)
@@ -145,13 +156,21 @@ def check_runtime_libs(root: Path):
 
 
 def check_stripped(root: Path):
-    """Audit hardening H-02 on Linux/macOS: shipped binary must carry no debug symbols."""
-    if platform.system() == "windows":
+    """Audit hardening H-02: shipped binary must carry no debug symbols.
+
+    ELF hosts (Linux) are inspected with ``readelf``; Mach-O hosts (macOS) with
+    ``otool -l``. Mach-O has no ``.symtab`` section but exports a ``__DWARF``
+    segment when debug info leaks into the release.
+    """
+    if platform.system() == "Windows":
         warn("Stripped check skipped on windows (readelf not applicable)")
         return
-    binary = root / "backend" / "dist" / "main.dist" / "bimos.bin"
-    if not binary.exists():
-        warn(f"{binary} not found — stripped check skipped")
+    binary = _find_binary(root)
+    if binary is None:
+        warn("compiled binary not found — stripped check skipped")
+        return
+    if platform.system() == "Darwin":
+        check_stripped_macho(binary)
         return
     proc = subprocess.run(["readelf", "-S", str(binary)], capture_output=True, text=True)
     sections = proc.stdout
@@ -162,6 +181,29 @@ def check_stripped(root: Path):
             print(f"         {ln.strip()}")
         sys.exit(1)
     ok("ELF stripped: 0 .debug/.symtab sections")
+
+
+def check_stripped_macho(binary: Path):
+    """Fail when the Mach-O binary still carries DWARF debug sections."""
+    otool = shutil.which("otool")
+    if not otool:
+        warn("otool not available — Mach-O stripped check skipped")
+        return
+    proc = subprocess.run([otool, "-l", str(binary)], capture_output=True, text=True)
+    if proc.returncode != 0:
+        warn(f"otool failed on {binary.name} — Mach-O stripped check skipped")
+        return
+    debug = [
+        ln.strip()
+        for ln in proc.stdout.splitlines()
+        if "__DWARF" in ln or "__debug_" in ln
+    ]
+    if debug:
+        error(f"Mach-O binary still exposes {len(debug)} DWARF section(s):")
+        for ln in debug[:5]:
+            print(f"         {ln}")
+        sys.exit(1)
+    ok("Mach-O without DWARF sections")
 
 
 def write_manifests(root: Path):
@@ -251,11 +293,149 @@ def verify_deb(root: Path, version: str):
     ok(f".deb audit clean → {deb.name}")
 
 
+def _sha256_file(path: Path) -> str:
+    import hashlib
+
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_macos_bundle(root: Path, version: str) -> Path | None:
+    """Structural audit of the macOS portable bundle without installing it.
+
+    Extracts to a temporary directory and checks layout, signing, architecture,
+    link paths and size. The archive is what the user downloads, so every check
+    runs against the extracted copy (permissions included).
+    """
+    bundle = root / "installer" / "dist" / f"BIMOS-{version}-macos-arm64.tar.gz"
+    if not bundle.exists():
+        warn(f"macOS bundle not found: {bundle} — verify skipped")
+        return None
+
+    staging = root / "installer" / "dist" / ".verify_macos"
+    if staging.exists():
+        shutil.rmtree(staging)
+    staging.mkdir(parents=True)
+    try:
+        subprocess.run(
+            ["tar", "--xattrs", "-xzf", str(bundle), "-C", str(staging)],
+            check=True,
+            capture_output=True,
+        )
+        app = staging / "BIMOS.app"
+        resources = app / "Contents" / "Resources"
+        binary = next(
+            (
+                candidate
+                for candidate in (
+                    app / "Contents" / "MacOS" / "bimos.bin",
+                    resources / "bimos" / "bimos.bin",
+                )
+                if candidate.exists()
+            ),
+            None,
+        )
+        info_plist = app / "Contents" / "Info.plist"
+        helper = staging / "Uninstall BIMOS.command"
+        plist_text = info_plist.read_text(encoding="utf-8") if info_plist.exists() else ""
+        match = re.search(
+            r"<key>CFBundleExecutable</key>\s*<string>([^<]+)</string>", plist_text
+        )
+        executable_name = match.group(1) if match else "BIMOS"
+
+        expected = [
+            app / "Contents" / "MacOS" / executable_name,
+            info_plist,
+            resources / "bimos.icns",
+            helper,
+            staging / "LEEME.txt",
+        ]
+        if binary is not None:
+            expected.append(binary)
+        missing = [p.relative_to(staging) for p in expected if not p.exists()]
+        if missing:
+            error(f"macOS bundle payload missing {len(missing)} file(s):")
+            for item in missing:
+                print(f"         {item}")
+            sys.exit(1)
+        if binary is None:
+            error("BIMOS.app has no bimos.bin executable")
+            sys.exit(1)
+        if not os.access(helper, os.X_OK):
+            error(f"Uninstall helper is not executable: {helper.relative_to(staging)}")
+            sys.exit(1)
+        ok("Payload: app, executable, Info.plist, icon, uninstall helper and LEEME")
+
+        for marker in ("org.bimos.app", "NSAllowsLocalNetworking"):
+            if marker not in plist_text:
+                error(f"Info.plist is missing {marker}")
+                sys.exit(1)
+        ok("Info.plist: bundle id and local networking exception present")
+
+        codesign = shutil.which("codesign")
+        if codesign:
+            proc = subprocess.run(
+                [codesign, "--verify", "--deep", "--strict", str(app)],
+                capture_output=True,
+                text=True,
+            )
+            if proc.returncode != 0:
+                error("codesign verification failed:")
+                print(f"         {proc.stderr.strip() or proc.stdout.strip()}")
+                sys.exit(1)
+            ok("Signature verified (ad-hoc, codesign --deep --strict)")
+        else:
+            warn("codesign not available — signature not verified")
+
+        lipo = shutil.which("lipo")
+        if lipo:
+            archs = subprocess.run(
+                [lipo, "-archs", str(binary)], capture_output=True, text=True
+            ).stdout.split()
+            if archs != ["arm64"]:
+                error(f"Unexpected architectures: {archs or 'unknown'} (expected arm64)")
+                sys.exit(1)
+            ok("Architecture: arm64")
+
+        otool = shutil.which("otool")
+        if otool:
+            linked = subprocess.run(
+                [otool, "-L", str(binary)], capture_output=True, text=True
+            ).stdout
+            # The first line is "<binary>:"; only dependency lines matter.
+            leaks = [
+                line.strip()
+                for line in linked.splitlines()[1:]
+                if re.search(r"/opt/homebrew|/usr/local|/Users/", line)
+            ]
+            if leaks:
+                error("Binary links against absolute build-machine paths:")
+                for line in leaks[:8]:
+                    print(f"         {line}")
+                sys.exit(1)
+            ok("otool: no absolute build-machine paths")
+
+        size_mb = bundle.stat().st_size / (1024 * 1024)
+        if size_mb > 200:
+            error(f"Bundle is {size_mb:.1f} MB (limit: 200 MB)")
+            sys.exit(1)
+        ok(f"Size: {size_mb:.1f} MB (limit: 200 MB)")
+        ok(f"SHA256 {bundle.name}: {_sha256_file(bundle)}")
+        return bundle
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+
 def verify_all(root: Path, version: str):
     info("Verifying build artifacts (no compilation)...")
     smoke_test_binary(root, version)
     check_stripped(root)
     check_runtime_libs(root)
+    if platform.system() == "Darwin":
+        verify_macos_bundle(root, version)
     write_manifests(root)
     verify_deb(root, version)
 
@@ -473,14 +653,15 @@ def package_windows_nsis(root: Path, version: str):
     ok(f"Windows installer ready → installer/dist/BIMOS-{version}-Setup.exe")
 
 
-def package_macos_dmg(root: Path, version: str):
-    info("Packaging → macOS .dmg (create-dmg)...")
-    require("create-dmg", "Install: brew install create-dmg")
-
-    script = root / "installer" / "build_dmg.sh"
+def package_macos_bundle(root: Path, version: str):
+    info("Packaging → macOS portable bundle (.tar.gz)...")
+    script = root / "installer" / "build_macos_bundle.sh"
+    if not script.exists():
+        error(f"macOS bundle script not found: {script}")
+        sys.exit(1)
     script.chmod(0o755)
     run(["bash", str(script), version], cwd=root)
-    ok(f"macOS DMG ready → installer/dist/BIMOS-{version}.dmg")
+    ok(f"macOS bundle ready → installer/dist/BIMOS-{version}-macos-arm64.tar.gz")
 
 
 # ── Main ────────────────────────────────────────────────────────────────────
@@ -505,7 +686,7 @@ def parse_args():
     p.add_argument("--skip-frontend",  action="store_true", help="Skip building/syncing the frontend")
     p.add_argument("--skip-nuitka",    action="store_true", help="Skip Nuitka compilation")
     p.add_argument("--skip-installer", action="store_true", help="Only compile, no installer")
-    p.add_argument("--verify",         action="store_true", help="Verify existing artifacts only: smoke test, stripped ELF, SHA256SUMS, .deb audit")
+    p.add_argument("--verify",         action="store_true", help="Verify existing artifacts only: smoke test, debug sections, SHA256SUMS, .deb/.tar.gz audit")
     p.add_argument(
         "--target",
         choices=["linux", "windows", "macos"],
@@ -558,7 +739,7 @@ def main():
         elif target == "windows":
             package_windows_nsis(root, version)
         elif target == "macos":
-            package_macos_dmg(root, version)
+            package_macos_bundle(root, version)
 
     # ── Step 4: Verify artifacts ────────────────────────────
     if not args.skip_nuitka:

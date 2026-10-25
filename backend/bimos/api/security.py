@@ -42,7 +42,10 @@ def ensure_valid_execution_mode() -> str:
 def _has_active_db_tokens() -> bool:
     try:
         from bimos.infrastructure.database import has_active_api_tokens
-    except RuntimeError:
+    except (RuntimeError, ImportError):
+        # No database configured (default local install) or a partially
+        # imported module: treat it as "no DB tokens" instead of failing
+        # every API request.
         return False
     try:
         return has_active_api_tokens()

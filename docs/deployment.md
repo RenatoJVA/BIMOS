@@ -9,7 +9,7 @@ API-only container.
 
 | Component | Runs on | Notes |
 |---|---|---|
-| CLI, GUI, FastAPI | Host (native) | Installed from `.deb`, `.exe`, `.dmg` or `pip install` |
+| CLI, GUI, FastAPI | Host (native) | Installed from `.deb`, `.exe`, portable macOS `.tar.gz` or `pip install` |
 | Boltz, Vina, GROMACS, Meeko | Podman/Docker container | Image `localhost/bimos/global:latest`, built by `bimos setup` |
 | ORCA / Gaussian 16 | Host | User-provided license; never distributed with BIMOS |
 | PostgreSQL | Optional | Only used by the reference Compose stack |

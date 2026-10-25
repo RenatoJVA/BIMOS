@@ -10,8 +10,30 @@ They are not committed to git because they are binary assets.
 | `bimos.png` | Linux | **Yes** | 256×256 PNG for .deb package |
 | `wizard_banner.bmp` | Windows | Optional | 164×314 px sidebar BMP for NSIS wizard |
 | `header.bmp` | Windows | Optional | 150×57 px header BMP for NSIS pages |
-| `dmg_background.png` | macOS | Optional | 660×400 px background image for the DMG window |
 | `LICENSE.rtf` | Windows | **Yes** | RTF license shown in NSIS wizard (already created) |
+
+The macOS icon is generated from the committed `bimos.iconset/` (no binary in
+git):
+
+```bash
+iconutil -c icns installer/assets/bimos.iconset -o installer/assets/bimos.icns
+```
+
+Other committed macOS assets:
+
+- `macos_launcher.c` — compiled by `installer/build_macos_bundle.sh` only when
+  Nuitka emits a plain `main.dist` (fallback). It is a real Mach-O main
+  executable (required for code signing) that launches the Nuitka binary with
+  `-g`. With Nuitka's native app bundle the binary itself is the main
+  executable and `main.py` adds `-g` automatically.
+- `Uninstall BIMOS.command` — standalone purge helper shipped both at the root
+  of the `.tar.gz` and inside `Contents/Resources`. Its embedded manifest is
+  checked against `backend/bimos/infrastructure/purge.py` by
+  `backend/tests/unit/test_uninstall.py`.
+
+The macOS artifact is a portable archive (no DMG); see
+`docs/build-macos.md` and `docs/uninstall.md`.
+
 
 ## Generating from a PNG source
 
