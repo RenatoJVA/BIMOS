@@ -133,7 +133,7 @@ def run(
         # H-05: no pipeline needs Linux capabilities -- they are pure numeric
         # compute over bind-mounted volumes -- so the whole set is dropped and
         # setuid escalation is disabled. Verified against the docking and QM
-        # pipelines; see private/consultorias/consultoria-12 for the evidence.
+        # pipelines; see the conformance audit for the evidence.
         full_cmd += ["--cap-drop=ALL"]
         full_cmd += ["--security-opt=no-new-privileges"]
 

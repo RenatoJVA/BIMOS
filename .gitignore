@@ -73,7 +73,6 @@ backend/htmlcov/
 .mypy_cache/
 .ruff_cache/
 test/outputs/
-private/tools/tooling/
 
 # Additional generated artifacts and local credentials
 coverage.xml
@@ -124,16 +123,8 @@ test/QM/orca/*
 test/QM/g16/*
 test/PREDICT/*
 
-# Internal docs (not for public repo)
-private/
-private/
-
-# Local database project (not part of the BIMOS repository)
-private/
-
-# Internal planning (local only; not tracked)
-private/notes.md
-private/notes.md
+# Local underscore-prefixed workspaces (personal/private material)
+_*/
 
 AGENTS.md
 

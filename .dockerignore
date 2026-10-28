@@ -43,9 +43,8 @@ frontend/dist/
 frontend/.vite/
 
 # --- docs and manuscripts ---------------------------------------------------
-# Not needed to run the app, and private/ holds large binary assets.
-private/
-private/
+# Local underscore-prefixed workspaces are never part of any build context.
+_*/
 
 # --- installers and packaged artefacts ---------------------------------------
 # builder.py and installer/ build the desktop bundles; the images never need
