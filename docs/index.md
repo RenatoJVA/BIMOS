@@ -18,7 +18,9 @@ BIMOS integrates molecular docking, protein structure prediction, molecular dyna
 
 ## Quick Start
 
-See [Installation](installation.md) and [Deployment](deployment.md) for installers, GPU requirements and remote access.
+See [Installation](installation.md) and [Deployment](deployment.md) for
+installers, the platform support matrix (Linux is recommended for the full
+stack), GPU requirements and remote access.
 
 ```bash
 pip install bimos

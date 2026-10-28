@@ -289,7 +289,8 @@ scope (OS-managed backups/logs are out of scope).
 - **White Screen on Launch**: check `~/.bimos/.env`. If `BIMOS_REMOTE_URL` points somewhere unreachable, the UI stalls — comment it out for local mode.
 - **macOS blocks the app (Gatekeeper)**: the portable bundle is ad-hoc signed, not notarized. Right-click `BIMOS.app` → **Open** → **Open**, or run `xattr -dr com.apple.quarantine /Applications/BIMOS.app`. See [ADR 0001](./docs/adr/0001-macos-portable-bundle.md).
 - **`bimos setup` refuses to build on macOS**: expected — the scientific image needs Linux + NVIDIA/CUDA. Use `bimos setup --config-only` and point the client at a Linux GPU server with `BIMOS_REMOTE_URL`, or `--force` only for unsupported experiments.
-- **macOS cannot run Boltz**: there is no CUDA and no CPU fallback. Boltz/docking/MD evidence comes from Linux/GPU; macOS is a UI/API client.
+- **macOS cannot run Boltz locally**: there is no CUDA and no CPU fallback. Boltz/docking/MD evidence comes from Linux/GPU. The macOS desktop app, API and CLI work natively; only the local scientific compute is hardware-limited, so delegate it to a Linux GPU host with `BIMOS_REMOTE_URL`.
+- **Windows containers are less stable for long jobs**: GUI/API/CLI and containerized Vina/GROMACS work, but prefer a Linux host for long GPU runs. Boltz needs a container runtime that exposes an NVIDIA GPU (WSL2/Docker Desktop); that GPU path is not the validated one.
 - **Segment Fault (Linux)**: missing OpenGL libs for the desktop shell; software rendering is enforced automatically, but ensure a standard display server.
 - **Docker Permission Denied**: add your user to the `docker` group (`sudo usermod -aG docker $USER`) or use Podman.
 - **Boltz aborts (no GPU)**: predictions require NVIDIA + CDI passthrough; MD/docking run fine on CPU.

@@ -1,11 +1,46 @@
 # Installation
 
+## Platform support
+
+| Platform | GUI/API/CLI | Local compute | Boltz | Status |
+|----------|-------------|---------------|-------|--------|
+| Linux + NVIDIA (Ubuntu 24.04) | Yes | Vina, GROMACS, QM | GPU | Recommended and validated |
+| Linux without GPU | Yes | Vina, GROMACS; QM with ORCA/G16 | No | Supported with GPU limitation |
+| Windows 10/11 | Yes | Vina and GROMACS in containers | Only if the container runtime exposes a GPU; not a validated path | Works but less stable than Linux |
+| macOS (Apple Silicon) | Yes | Not local; use a remote Linux backend | No local GPU | Works; hardware-limited |
+
+Linux (Ubuntu 24.04) with an NVIDIA GPU is the recommended platform for the
+full scientific stack. Windows and macOS are supported with the limitations
+described in their sections.
+
 ## Pre-built Installers
 
 The Linux `.deb` is built and verified locally under `installer/dist/`.
-Windows `.exe` is not published yet; it requires its native build host and
-validation. The macOS artifact is a portable bundle built on Apple Silicon
+A Windows `.exe` has been built and validated locally, but it is not yet part
+of the public release while CI/publication remains pending. The macOS artifact
+is a portable bundle built on Apple Silicon
 (`installer/dist/BIMOS-<version>-macos-arm64.tar.gz`).
+
+### Windows
+
+When the installer is included in a release, run
+`BIMOS-<version>-Setup.exe`. It installs to `C:\Program Files\BIMOS`, creates
+Desktop and Start Menu shortcuts, adds the install directory to PATH and
+registers an uninstall entry. The installer is not code-signed, so Windows
+SmartScreen may warn; choose **More info → Run anyway**.
+
+```powershell
+# Launch the desktop UI after installing
+& "$env:ProgramFiles\BIMOS\bimos.exe" -g
+```
+
+BIMOS keeps its data in `%USERPROFILE%\.bimos`, never inside the install
+directory. GUI, API and CLI are validated, and the containerized Vina/GROMACS
+paths work through the Windows container runtime. Long jobs are less stable
+than on Linux. For Boltz, the container runtime must expose an NVIDIA GPU
+(WSL2/Docker Desktop); that GPU path is not validated. Use
+`bimos setup --config-only` and `BIMOS_REMOTE_URL` to delegate GPU work to a
+Linux host.
 
 ### macOS (Apple Silicon)
 
@@ -29,11 +64,12 @@ may block it: right-click the app → **Open** → **Open**, or run:
 xattr -dr com.apple.quarantine /Applications/BIMOS.app
 ```
 
-macOS is a UI/API client: it does not ship CUDA and `bimos setup` will not
-build the scientific image (use `bimos setup --config-only`, or point the app
-at a Linux GPU server with `BIMOS_REMOTE_URL`). See
-[Uninstall](uninstall.md) for the standalone purge helper and
-[ADR 0001](adr/0001-macos-portable-bundle.md) for the support scope.
+macOS runs the GUI, API and CLI natively. It does not ship CUDA and
+`bimos setup` will not build the scientific image (use
+`bimos setup --config-only`), so scientific compute is delegated to a Linux
+GPU host with `BIMOS_REMOTE_URL`. This is a hardware limitation, not a
+UI-only scope. See [Uninstall](uninstall.md) for the standalone purge helper
+and [ADR 0001](adr/0001-macos-portable-bundle.md) for the support scope.
 
 ## From Source
 
@@ -98,6 +134,8 @@ docker compose up -d
 - A licensed ORCA or Gaussian 16 installation for the `qm-orca` / `qm-g16`
   commands — neither is distributed with BIMOS (see [TERMS.md](https://github.com/RenatoJVA/BIMOS/blob/main/TERMS.md))
 
-On macOS there is no NVIDIA/CUDA: the app works as a UI/API client and the
-scientific image is not built locally. See
-[Uninstall](uninstall.md) for the complete purge procedure.
+On macOS there is no NVIDIA/CUDA: the app works, but scientific compute is
+delegated to a Linux GPU host. On Windows the container path is supported for
+Vina/GROMACS; Boltz requires a runtime that exposes an NVIDIA GPU and is not
+the validated path. See [Platform support](#platform-support) for the matrix
+and [Uninstall](uninstall.md) for the complete purge procedure.

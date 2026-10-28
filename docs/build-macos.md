@@ -1,9 +1,11 @@
 # Building the macOS portable bundle
 
-macOS support is a **compliance port**, not a compute platform: the bundle
-ships the UI/API/CLI and no CUDA stack. The canonical build environment for
-Linux stays `pixi`; macOS uses `uv` + Xcode. See
-[ADR 0001](adr/0001-macos-portable-bundle.md) for the rationale.
+macOS runs the GUI/API/CLI natively, but scientific compute is delegated to a
+Linux GPU host: the bundle ships no CUDA stack and `bimos setup` does not build
+the scientific image locally. This is a hardware limitation, not a UI-only
+scope. The canonical build environment for Linux stays `pixi`; macOS uses
+`uv` + Xcode. See [ADR 0001](adr/0001-macos-portable-bundle.md) for the
+rationale.
 
 ## Prerequisites
 

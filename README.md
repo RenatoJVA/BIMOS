@@ -35,19 +35,25 @@
 
 | Platform | Format | Status |
 |----------|--------|--------|
-| Linux    | `.deb` | Built and verified locally (`installer/dist/`) |
-| Windows  | `.exe` | Build/validation pending |
-| macOS    | `.tar.gz` (portable `BIMOS.app`, arm64) | UI opens and API responds on Apple Silicon; no local CUDA |
+| Linux    | `.deb` | Built and verified (`installer/dist/`); full stack validated |
+| Windows  | `.exe` | Local build validated; public release/CI pending |
+| macOS    | `.tar.gz` (portable `BIMOS.app`, arm64) | App validated on Apple Silicon; compute delegated to a Linux GPU host |
 
-The Linux `.deb` is the current validated artifact. The macOS portable bundle
-is built locally on Apple Silicon and validated for the interface; Windows is
-still pending. Until the remaining artifacts are validated, use the source
-installation or connect the desktop client to a remote BIMOS API.
+Linux (Ubuntu 24.04) with an NVIDIA GPU is the recommended platform for the
+full scientific stack. Windows and macOS work with the limitations below.
+
+| Platform | GUI/API/CLI | Local compute | Boltz | Notes |
+|----------|-------------|---------------|-------|-------|
+| Linux + NVIDIA | Yes | Vina, GROMACS, QM, Boltz | GPU | Recommended and validated |
+| Linux without GPU | Yes | Vina, GROMACS; QM with ORCA/G16 | No | GPU-dependent |
+| Windows 10/11 | Yes | Vina and GROMACS in containers | Only if the container runtime exposes a GPU; not a validated path | Works but less stable than Linux; `.exe` not yet in the public release |
+| macOS (Apple Silicon) | Yes | Not local; use a remote Linux backend | No local GPU | Works; hardware-limited |
 
 On macOS the bundle carries no CUDA stack and does not build the scientific
-image: it is a UI client. Point it at a Linux GPU server with
-`BIMOS_REMOTE_URL` for prediction/docking/MD jobs. Uninstall with
-`Uninstall BIMOS.command` or `bimos uninstall` (see
+image. Use `bimos setup --config-only` and point the client at a Linux GPU
+server with `BIMOS_REMOTE_URL` for prediction/docking/MD jobs. On Windows the
+container path is validated for Vina/GROMACS; long GPU jobs still belong on a
+Linux host. Uninstall with `Uninstall BIMOS.command` or `bimos uninstall` (see
 [docs/uninstall.md](docs/uninstall.md)).
 
 ### From Source

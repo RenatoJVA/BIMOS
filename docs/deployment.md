@@ -133,8 +133,10 @@ activate or run it until the release gate is approved:
   `builder.py`/`--verify`, and the API image smoke test.
 
 Then run **one** Linux build, download the artifact and repeat `--verify` on the
-downloaded `.deb`. Windows/macOS builds remain out of scope until `R-ROAD-01`
-is explicitly approved.
+downloaded `.deb`. Automated Windows/macOS CI artifacts remain pending until
+`R-ROAD-01` is explicitly approved; local Windows/macOS builds are functional
+with the limitations described in
+[Installation](installation.md#platform-support).
 
 `builder.py --verify` checks the binary smoke test (`bimos --version`), stripped
 debug symbols, the bundled NSS chain and the `.deb` payload (binary, wrapper,

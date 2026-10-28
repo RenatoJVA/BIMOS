@@ -20,7 +20,8 @@ completely?”, including configuration, web state and container artifacts.
 1. **macOS is a compliance port, not a compute platform.** It delivers the
    desktop UI/API/CLI against the same backend. Scientific jobs remain
    validated on Linux + NVIDIA; macOS may connect to a Linux GPU server with
-   `BIMOS_REMOTE_URL`.
+   `BIMOS_REMOTE_URL`. *(Amended 2026-10-28: macOS is a supported client with
+   hardware-limited local compute; see the Amendment section below.)*
 2. **Artifact: portable bundle, not an installer.** Ship
    `BIMOS-<version>-macos-arm64.tar.gz` containing `BIMOS.app`,
    `Uninstall BIMOS.command` and `LEEME.txt`. There is no DMG or `.pkg`: the
@@ -53,10 +54,26 @@ completely?”, including configuration, web state and container artifacts.
 - Unpacking preserves the ad-hoc signature and the helper's executable bit.
 - macOS evidence covers R1 (UI) and E1 (executable). It does **not** claim
   Boltz/docking/MD parity; that evidence stays on Linux/GPU and Windows.
-- If macOS ever becomes a supported compute platform, the project should move
-  it into the hermetic pixi environment and add signing/notarization plus CI.
+- If macOS ever gains local GPU compute, the project should move it into the
+  hermetic pixi environment and add signing/notarization plus CI.
 - External distribution to non-technical evaluators will require Developer ID
   signing and notarization; that is an explicit future decision.
+
+## Amendment — 2026-10-28
+
+The "compliance port, not a compute platform" wording above records the
+original Hito 1 scope and is kept as historical context. The corrected support
+position is:
+
+- macOS runs the GUI, API and CLI natively on Apple Silicon.
+- The full scientific stack is not built locally: there is no NVIDIA/CUDA and
+  `bimos setup` refuses the CUDA image unless `--force` is used.
+- Scientific compute is delegated to a Linux + NVIDIA host through
+  `BIMOS_REMOTE_URL`; this is a hardware limitation, not a UI-only scope.
+- Windows also runs the GUI/API/CLI and adds a validated container path for
+  Vina/GROMACS; it is less stable than Linux for long jobs.
+- Linux (Ubuntu 24.04) with an NVIDIA GPU remains the recommended platform for
+  the full stack.
 
 ## Exit criteria
 
@@ -64,4 +81,5 @@ completely?”, including configuration, web state and container artifacts.
   (`codesign`, `lipo`, `otool`, size, hash).
 - The UI checklist for R1 passes on macOS.
 - `bimos uninstall --verify` returns 0 and the helper reports `PASS`.
-- Windows and FMP008 remain tracked as pending; E1 is not declared complete.
+- Windows public release/CI and FMP008 remain tracked as pending; the local
+  Windows build is validated.
