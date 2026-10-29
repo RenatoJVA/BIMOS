@@ -56,6 +56,9 @@ container path is validated for Vina/GROMACS; long GPU jobs still belong on a
 Linux host. Uninstall with `Uninstall BIMOS.command` or `bimos uninstall` (see
 [docs/uninstall.md](docs/uninstall.md)).
 
+For everyday usage —running a job, finding your results, fixing a blocked
+launch— see the [user guide](docs/user-guide.md).
+
 ### From Source
 
 ```bash

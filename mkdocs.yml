@@ -54,6 +54,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Installation: installation.md
+  - User guide: user-guide.md
   - Uninstall: uninstall.md
   - Deployment: deployment.md
   - CLI Reference: cli.md
