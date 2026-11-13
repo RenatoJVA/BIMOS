@@ -65,6 +65,14 @@ def test_validate_output_rejects_inside_input(tmp_path: Path) -> None:
         validate_output(str(inputs / "out"), [str(inputs)])
 
 
+def test_validate_output_allows_sibling_of_ligand_file(tmp_path: Path) -> None:
+    """`bimos dock rec.pdb ligands.sdf -o out` must accept a sibling directory."""
+    ligands = tmp_path / "ligands.sdf"
+    ligands.write_text("", encoding="utf-8")
+
+    assert validate_output(str(tmp_path / "out"), [str(tmp_path / "rec.pdb"), str(ligands)])
+
+
 def test_validate_output_expands_tilde(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     assert validate_output("~/out", []) == str(tmp_path / "out")

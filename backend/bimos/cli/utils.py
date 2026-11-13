@@ -91,8 +91,12 @@ def validate_output(output: str | None, inputs: list[str | None]) -> str | None:
         if not raw:
             continue
         anchor = Path(os.path.expanduser(raw)).resolve()
-        base = anchor if anchor.is_dir() else anchor.parent
-        if resolved == anchor or base in resolved.parents:
+        # A directory input owns everything below it; a file input only owns
+        # itself, so a sibling output directory (the documented `-o out` next
+        # to `ligands.sdf`) stays valid.
+        base = anchor if anchor.is_dir() else None
+        inside = resolved == anchor or (base is not None and base in resolved.parents)
+        if inside:
             raise click.ClickException(
                 f"Output '{output}' must not be inside input '{raw}'."
             )
