@@ -21,7 +21,7 @@ def _itp_text(mol: str, res: str, n: int = 2) -> str:
     return f"[ moleculetype ]\n; Name  nrexcl\n{mol}   3\n[ atoms ]\n{atoms}\n"
 
 
-def _fake_gmx(self, args: list[str], cwd, stdin: str = "") -> int:
+def _fake_gmx(self, args: list[str], cwd, stdin: str = "", timeout: int = 7200) -> int:
     """Emulate file outputs of the PREP stage (no real GROMACS)."""
     from pathlib import Path as _Path
 

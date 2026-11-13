@@ -56,14 +56,15 @@ class MolecularDynamicsPipeline(Pipeline):
         threads = settings.get_threads()
         return ["-ntmpi", "1", "-ntomp", str(threads)]
 
-    def _gmx(self, args: list[str], cwd: Path, stdin: str = "") -> int:
+    def _gmx(self, args: list[str], cwd: Path, stdin: str = "", timeout: int = 7200) -> int:
         return container.run(
             command=["gmx", *args],
             image=settings.bimos_image,
             volumes={str(cwd): "/workspace"},
             workdir="/workspace",
             on_output=self.on_output,
-            stdin_text=stdin
+            stdin_text=stdin,
+            timeout=timeout,
         )
 
     @staticmethod
@@ -225,7 +226,9 @@ class MolecularDynamicsPipeline(Pipeline):
             if j > 1:
                 m_args += ["-cpi", f"{tag}_{j-1}.cpt"]
 
-            rc = self._gmx(m_args, cwd)
+            # The container timeout must exceed gmx mdrun -maxh (6 h); otherwise
+            # BIMOS launches a second mdrun while the first is still running.
+            rc = self._gmx(m_args, cwd, timeout=8 * 3600)
             if rc != 0 and not (cwd / cpt).exists():
                 fails += 1
                 if fails >= 3:

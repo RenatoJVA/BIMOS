@@ -218,3 +218,28 @@ def test_minimization_trjcat_uses_container_relative_paths(tmp_path: Path, monke
     assert trjcat_calls[0][2] == "min-comp-traj.trr"
     assert trjcat_calls[0][3] == "min-comp.trr"
     assert not any(arg.startswith("/") for arg in trjcat_calls[0])
+
+
+def test_sdm_uses_a_timeout_longer_than_mdrun_maxh(tmp_path: Path, monkeypatch) -> None:
+    """The container timeout must outlast `-maxh 6`; otherwise a second mdrun starts."""
+    pipeline = MolecularDynamicsPipeline(output_dir=str(tmp_path))
+    captured: list[dict] = []
+
+    (tmp_path / "comp.top").write_text("[ system ]\nFake\n")
+    (tmp_path / "nvt-comp.gro").write_text("FAKE\n2\n")
+    (tmp_path / "sdm-comp.tpr").write_bytes(b"tpr")
+
+    def _gmx(args: list[str], work: Path, stdin: str = "", **kwargs) -> int:
+        captured.append({**kwargs, "args": args})
+        if args[0] == "mdrun":
+            (tmp_path / "sdm-comp.gro").write_text("FAKE\n2\n")
+            (tmp_path / "sdm-comp.log").write_text("Finished mdrun\n")
+            (tmp_path / "sdm-comp_1.cpt").write_bytes(b"cpt")
+        return 0
+
+    monkeypatch.setattr(pipeline, "_gmx", _gmx)
+    pipeline._run_sim_phase("sdm", "nvt", "comp", tmp_path, is_holo=False)
+
+    mdrun_calls = [call for call in captured if call["args"][0] == "mdrun"]
+    assert mdrun_calls, "expected an mdrun invocation"
+    assert all(call.get("timeout") == 8 * 3600 for call in mdrun_calls)

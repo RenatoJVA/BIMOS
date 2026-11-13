@@ -348,6 +348,7 @@ def collect_residues(
     include_outputs: bool = False,
     system: bool = False,
     extra_app_paths: list[Path] | None = None,
+    system_name: str | None = None,
 ) -> list[Residue]:
     """Return every BIMOS-owned location that exists on this host."""
     home = Path.home()
@@ -377,8 +378,8 @@ def collect_residues(
                 Residue(kind="dir", description="job output recorded by BIMOS", path=output)
             )
 
-    system_name = platform.system()
-    if system_name == "Darwin":
+    current_system = system_name or platform.system()
+    if current_system == "Darwin":
         for path, label in _macos_web_paths(home):
             residues.append(
                 Residue(
@@ -387,7 +388,7 @@ def collect_residues(
                     path=path,
                 )
             )
-    elif system_name == "Linux":
+    elif current_system == "Linux":
         for path, label in _linux_user_paths(home):
             residues.append(
                 Residue(
@@ -406,7 +407,7 @@ def collect_residues(
                         owner="system",
                     )
                 )
-    elif system_name == "Windows":
+    elif current_system == "Windows":
         for path, label in _windows_user_paths():
             residues.append(
                 Residue(kind="dir", description=f"Windows {label}", path=path)
@@ -555,8 +556,13 @@ def purge(
     remove_machine: bool = False,
     base_path: Path | None = None,
     extra_app_paths: list[Path] | None = None,
+    system_name: str | None = None,
 ) -> PurgeReport:
-    """Remove every BIMOS-owned residue and return what happened."""
+    """Remove every BIMOS-owned residue and return what happened.
+
+    ``system_name`` overrides the detected platform (used by tests so the
+    macOS and Linux residue lists can be exercised on any host).
+    """
     base = (base_path or default_base_path()).expanduser()
     _check_base_marker(base, force_path=force_path)
 
@@ -570,6 +576,7 @@ def purge(
         include_outputs=include_outputs,
         system=system,
         extra_app_paths=extra_app_paths,
+        system_name=system_name,
     )
     if keep_data:
         keep_roots = [base]
@@ -611,6 +618,7 @@ def purge(
                 include_outputs=include_outputs,
                 system=system,
                 extra_app_paths=extra_app_paths,
+                system_name=system_name,
             )
             if residue.exists()
         ]

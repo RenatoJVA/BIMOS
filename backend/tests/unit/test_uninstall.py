@@ -70,7 +70,7 @@ def test_purge_removes_data_and_web_state(home: Path) -> None:
     preferences.parent.mkdir(parents=True)
     preferences.write_text("plist\n", encoding="utf-8")
 
-    report = purge.purge(base_path=base, remove_app=False)
+    report = purge.purge(base_path=base, remove_app=False, system_name="Darwin")
 
     assert report.ok(), report.as_dict()
     assert not base.exists()
@@ -105,7 +105,7 @@ def test_keep_data_preserves_the_base_directory(home: Path) -> None:
     webkit = home / "Library" / "WebKit" / "org.bimos.app"
     webkit.mkdir(parents=True)
 
-    report = purge.purge(base_path=base, keep_data=True)
+    report = purge.purge(base_path=base, keep_data=True, system_name="Darwin")
 
     assert base.exists()
     assert (base / "workspace" / "job.txt").exists()

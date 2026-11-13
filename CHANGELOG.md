@@ -37,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The MD pipeline no longer lets the container timeout expire before `gmx mdrun`: the SDM stage now uses an 8 h timeout, so BIMOS cannot launch a second `mdrun` while the first is still running and writing checkpoints.
+- macOS residue tests pin the platform instead of assuming the host: `purge.purge()` and `collect_residues()` accept a `system_name` override, so the macOS and Linux residue lists are exercised on any machine.
 - Gaussian `mem` is parsed with its unit. `32GB` was read as 0.03 GB, so the `qm-g16` guard could never block on the packaged default.
 - `qm-g16` is graded against the Gaussian configuration instead of inheriting ORCA's memory and job count. `bimos screen` does the same for the backend selected with `--qm`.
 - `bimos screen` checks the configured Vina thread count instead of skipping the CPU check.
