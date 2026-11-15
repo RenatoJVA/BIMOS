@@ -317,7 +317,7 @@ class MolecularDynamicsPipeline(Pipeline):
                 self._build_complex(cwd / "prot-pdb2gmx.gro", cwd / lig_gro_name, resname, cwd / f"{comp}-raw.gro")
                 self._gmx(["genrestr", "-f", lig_gro_name, "-o", lig_posre_name, "-fc", "1000", "1000", "1000"], cwd, f"{resname}\n")
                 self._inject_posres(cwd / f"{comp}.top", candidate)
-                self._gmx(["editconf", "-f", f"{comp}-raw.gro", "-o", f"pre-{comp}-solv.gro", "-bt", "cubic", "-box", *box], cwd)
+                self._box_complex(comp, box, cwd)
                 self._gmx(["solvate", "-cp", f"pre-{comp}-solv.gro", "-cs", self.md_config.solvent_gro, "-o", f"min-{comp}-solv.gro", "-p", f"{comp}.top"], cwd)
                 self._gmx(["grompp", "-f", "holo-ions.mdp", "-c", f"min-{comp}-solv.gro", "-p", f"{comp}.top", "-o", f"min-{comp}.tpr", "-maxwarn", "3"], cwd)
                 self._gmx(["genion", "-s", f"min-{comp}.tpr", "-o", f"min-{comp}.gro", "-p", f"{comp}.top", "-neutral", "-conc", self.md_config.ion_concentration], cwd, "SOL\n")
@@ -449,6 +449,20 @@ class MolecularDynamicsPipeline(Pipeline):
             marker = "; Include water topology"
             content = content.replace(marker, block + marker, 1) if marker in content else content.rstrip() + "\n" + block
             top.write_text(content)
+
+    def _box_complex(self, comp: str, box: list[str], cwd: Path) -> None:
+        """Centre the assembled complex in the simulation box.
+
+        The complex keeps the crystallographic frame, which is not centred on the
+        origin. Without ``-c`` the solute can cross the periodic boundary and
+        overlap its own images, which shows up as a huge Lennard-Jones energy in
+        minimisation that never converges.
+        """
+        self._gmx(
+            ["editconf", "-f", f"{comp}-raw.gro", "-o", f"pre-{comp}-solv.gro",
+             "-c", "-bt", "cubic", "-box", *box],
+            cwd,
+        )
 
     def _build_complex(self, prot: Path, lig: Path, res: str, out: Path) -> None:
         p_lines = prot.read_text().splitlines(keepends=True)

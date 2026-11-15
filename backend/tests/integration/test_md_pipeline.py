@@ -243,3 +243,21 @@ def test_sdm_uses_a_timeout_longer_than_mdrun_maxh(tmp_path: Path, monkeypatch) 
     mdrun_calls = [call for call in captured if call["args"][0] == "mdrun"]
     assert mdrun_calls, "expected an mdrun invocation"
     assert all(call.get("timeout") == 8 * 3600 for call in mdrun_calls)
+
+
+def test_holo_complex_is_centred_before_solvation(tmp_path: Path, monkeypatch) -> None:
+    """A complex left in its crystallographic frame can cross the periodic box."""
+    pipeline = MolecularDynamicsPipeline(output_dir=str(tmp_path))
+    calls: list[list[str]] = []
+
+    def _gmx(args: list[str], work: Path, stdin: str = "") -> int:
+        calls.append(args)
+        return 0
+
+    monkeypatch.setattr(pipeline, "_gmx", _gmx)
+    pipeline._box_complex("comp", ["9.0", "9.0", "9.0"], tmp_path)
+
+    editconf = [c for c in calls if c[0] == "editconf"]
+    assert len(editconf) == 1
+    assert "-c" in editconf[0]
+    assert editconf[0][-3:] == ["9.0", "9.0", "9.0"]

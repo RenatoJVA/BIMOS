@@ -18,6 +18,27 @@ def largest_fragment(mol):
         return mol
     return max(frags, key=lambda m: m.GetNumHeavyAtoms())
 
+def embed(mol_h):
+    """Generate 3D coordinates, relaxing the embedding constraints if needed.
+
+    Strained fused/bridged polycycles often fail ETKDG's bounds smoothing even
+    though a perfectly valid conformer exists. Retrying with random initial
+    coordinates and without the chirality/smoothing constraints recovers them
+    instead of dropping the ligand from the screen.
+    """
+    if AllChem.EmbedMolecule(mol_h, AllChem.ETKDGv3()) != -1:
+        return True
+    if AllChem.EmbedMolecule(mol_h, useRandomCoords=True) != -1:
+        return True
+
+    relaxed = AllChem.ETKDGv3()
+    relaxed.useRandomCoords = True
+    relaxed.maxIterations = 5000
+    relaxed.ignoreSmoothingFailures = True
+    relaxed.enforceChirality = False
+    return AllChem.EmbedMolecule(mol_h, relaxed) != -1
+
+
 def prepare_molecule(sdf_in, sdf_out):
     """
     Load molecule from SDF, add hydrogens, generate 3D coords, and optimize.
@@ -46,10 +67,7 @@ def prepare_molecule(sdf_in, sdf_out):
         mol_h = Chem.AddHs(mol)
 
         # Generate 3D coordinates (fallback for very small or tricky molecules)
-        if (
-            AllChem.EmbedMolecule(mol_h, AllChem.ETKDGv3()) != -1
-            or AllChem.EmbedMolecule(mol_h, useRandomCoords=True) != -1
-        ):
+        if embed(mol_h):
             with contextlib.suppress(Exception):
                 AllChem.MMFFOptimizeMolecule(mol_h)
 
